@@ -174,6 +174,10 @@ type E2EFixture = {
 	/**
 	 * A second, independent browser context and page — standing in for the
 	 * person the link was sent to. Logged out, same as they would be.
+	 *
+	 * Emphatically logged out: the suite signs every context in as the
+	 * administrator by default, and a "stranger" who can already edit the post
+	 * is not a stranger at all.
 	 */
 	secondPage: Page;
 	/** Editor utilities bound to {@link E2EFixture.secondPage}. */
@@ -221,7 +225,17 @@ export const test = base.extend< E2EFixture, {} >( {
 	},
 
 	secondPage: async ( { browser }, use ) => {
-		const context = await browser.newContext();
+		/*
+		 * `storageState` in the shared Playwright config points at the
+		 * administrator's saved session, and a context made here picks it up.
+		 * Handing it an empty one instead is what makes this a stranger's
+		 * browser rather than a second window onto the sharer's own account —
+		 * without it the link recognises whoever follows it as the person who
+		 * shared it, and sends them to the post with no invitation at all.
+		 */
+		const context = await browser.newContext( {
+			storageState: { cookies: [], origins: [] },
+		} );
 		const secondPage = await context.newPage();
 		const complaints: string[] = [];
 
