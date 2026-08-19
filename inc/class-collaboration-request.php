@@ -474,8 +474,28 @@ final class Collaboration_Request {
 			add_user_to_blog( get_current_blog_id(), $user_id, '' );
 		}
 
+		/*
+		 * Two people can open the same link in the same moment, and both get
+		 * this far. add_post_meta()'s unique flag is what settles it: whichever
+		 * account claims the request keeps it, and the other is deleted rather
+		 * than left in the users table with nothing pointing at it.
+		 */
+		if ( ! add_post_meta( $this->post->ID, self::META_USER_ID, $user_id, true ) ) {
+			$claimed_by = $this->get_user_id();
+
+			if ( $claimed_by > 0 && $claimed_by !== $user_id && get_userdata( $claimed_by ) instanceof WP_User ) {
+				require_once ABSPATH . 'wp-admin/includes/user.php';
+
+				wp_delete_user( $user_id );
+
+				return $claimed_by;
+			}
+
+			// The stored ID points at an account that no longer exists. Take over.
+			update_post_meta( $this->post->ID, self::META_USER_ID, $user_id );
+		}
+
 		update_user_meta( $user_id, self::USER_META_REQUEST_ID, $this->post->ID );
-		update_post_meta( $this->post->ID, self::META_USER_ID, $user_id );
 
 		/*
 		 * Somebody who came to help with one post for a quarter of an hour does
@@ -567,16 +587,25 @@ final class Collaboration_Request {
 		if ( $user_id > 0 ) {
 			require_once ABSPATH . 'wp-admin/includes/user.php';
 
+			// Null, not 0: wp_delete_user() reads 0 as "reassign to user 0" and
+			// only treats null as "there is nobody to reassign to".
+			$author_id = $this->get_author_id();
+			$reassign  = $author_id > 0 ? $author_id : null;
+
+			/*
+			 * wp_delete_user() either way, and first: it is the only one of the
+			 * two that reassigns, and on multisite it detaches the account from
+			 * this site rather than deleting it. Reaching for wpmu_delete_user()
+			 * alone would delete every post the account authored — which
+			 * includes the collaborator's revisions of the shared post, the very
+			 * history this is trying to keep.
+			 */
+			wp_delete_user( $user_id, $reassign );
+
 			if ( is_multisite() ) {
 				require_once ABSPATH . 'wp-admin/includes/ms.php';
 
 				wpmu_delete_user( $user_id );
-			} else {
-				// Null, not 0: wp_delete_user() reads 0 as "reassign to user 0"
-				// and only treats null as "there is nobody to reassign to".
-				$author_id = $this->get_author_id();
-
-				wp_delete_user( $user_id, $author_id > 0 ? $author_id : null );
 			}
 		}
 

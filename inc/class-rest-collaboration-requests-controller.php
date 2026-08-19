@@ -306,7 +306,14 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			return true;
 		}
 
-		if ( current_user_can( 'edit_others_posts' ) ) {
+		/*
+		 * Scoped to the shared post, not the site-wide `edit_others_posts`:
+		 * whoever may edit the post may manage the links to it, which is the
+		 * same rule create_item_permissions_check() applies when one is made.
+		 */
+		$parent_id = $collaboration_request->get_parent_id();
+
+		if ( $parent_id > 0 && current_user_can( 'edit_post', $parent_id ) ) {
 			return true;
 		}
 

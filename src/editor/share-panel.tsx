@@ -30,6 +30,7 @@ export function SharePanel() {
 		request,
 		capabilities,
 		isCreating,
+		isRevoking,
 		canShare,
 		create,
 		close,
@@ -61,6 +62,7 @@ export function SharePanel() {
 					request={ request }
 					capabilities={ capabilities }
 					onToggleCapability={ toggleCapability }
+					isRevoking={ isRevoking }
 					onRequestClose={ close }
 				/>
 			) }

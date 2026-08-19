@@ -48,6 +48,24 @@ function getErrorMessage( error: unknown, fallback: string ): string {
 }
 
 /**
+ * Determines whether a rejection was the server saying the link is not there.
+ *
+ * The distinction matters: a 404 is the server confirming a link is gone, while
+ * a timeout or a 500 says nothing about whether it is still live.
+ *
+ * @param error The rejection value.
+ */
+function isNotFound( error: unknown ): boolean {
+	return (
+		!! error &&
+		typeof error === 'object' &&
+		'data' in error &&
+		!! ( error as { data?: { status?: number } } ).data &&
+		404 === ( error as { data: { status?: number } } ).data.status
+	);
+}
+
+/**
  * Manages the lifecycle of a single collaboration request.
  *
  * Mints the link, watches for somebody to turn up, keeps what it grants in step
@@ -59,6 +77,7 @@ export function useCollaborationRequest() {
 		null
 	);
 	const [ isCreating, setIsCreating ] = useState( false );
+	const [ isRevoking, setIsRevoking ] = useState( false );
 	const [ capabilities, setCapabilities ] =
 		useState< CollaborationCapability[] >( DEFAULT_CAPABILITIES );
 
@@ -81,20 +100,35 @@ export function useCollaborationRequest() {
 	const tokenRef = useRef< string | null >( null );
 	tokenRef.current = token;
 
-	const revoke = useCallback( async ( revokedToken: string | null ) => {
-		if ( ! revokedToken ) {
-			return;
-		}
+	// Likewise, so that a capability change can be worked out from the latest
+	// value without the callback being rebuilt on every toggle.
+	const capabilitiesRef = useRef( capabilities );
+	capabilitiesRef.current = capabilities;
 
-		try {
-			await apiFetch( {
-				path: `${ REST_BASE }/${ revokedToken }`,
-				method: 'DELETE',
-			} );
-		} catch {
-			// The link expires on its own soon enough; nothing useful to say here.
-		}
-	}, [] );
+	/** Whatever capability update is currently in flight. */
+	const pendingRef = useRef< Promise< unknown > >( Promise.resolve() );
+
+	/**
+	 * Asks the server to revoke a link, reporting whether it is now gone.
+	 *
+	 * A 404 counts as gone: the link had already expired or been cleaned up,
+	 * which is the outcome being asked for.
+	 */
+	const revoke = useCallback(
+		async ( revokedToken: string ): Promise< boolean > => {
+			try {
+				await apiFetch( {
+					path: `${ REST_BASE }/${ revokedToken }`,
+					method: 'DELETE',
+				} );
+
+				return true;
+			} catch ( error ) {
+				return isNotFound( error );
+			}
+		},
+		[]
+	);
 
 	const create = useCallback( async () => {
 		setIsCreating( true );
@@ -123,8 +157,38 @@ export function useCollaborationRequest() {
 		}
 	}, [ capabilities, createErrorNotice, postId ] );
 
-	const close = useCallback( () => {
-		void revoke( tokenRef.current );
+	/*
+	 * The dialog closes only once the server says the link is gone. Closing it
+	 * on a failed request would take the URL away from the one person able to
+	 * try again, while leaving the link working for everybody who has it.
+	 */
+	const close = useCallback( async () => {
+		const revokedToken = tokenRef.current;
+
+		if ( ! revokedToken ) {
+			setRequest( null );
+
+			return;
+		}
+
+		setIsRevoking( true );
+
+		const revoked = await revoke( revokedToken );
+
+		setIsRevoking( false );
+
+		if ( ! revoked ) {
+			void createErrorNotice(
+				__(
+					'The collaboration link could not be revoked, and is still live. Please try again.',
+					'public-collaboration'
+				),
+				{ type: 'snackbar' }
+			);
+
+			return;
+		}
+
 		setRequest( null );
 		setCapabilities( DEFAULT_CAPABILITIES );
 
@@ -132,50 +196,61 @@ export function useCollaborationRequest() {
 			__( 'Collaboration link revoked.', 'public-collaboration' ),
 			{ type: 'snackbar' }
 		);
-	}, [ createSuccessNotice, revoke ] );
+	}, [ createErrorNotice, createSuccessNotice, revoke ] );
 
 	/*
 	 * Toggling a checkbox changes the live link rather than the next one. The
 	 * server is the only thing that decides what a collaborator may do, and it
 	 * decides it again on every request they make — so a box unticked here takes
 	 * effect on the page they are looking at, without revoking anything.
+	 *
+	 * Each update waits for the one before it. Two quick clicks each send the
+	 * whole list, so letting them race would let the earlier one land last and
+	 * put back what the later one took away.
 	 */
 	const toggleCapability = useCallback(
-		async ( capability: CollaborationCapability, enabled: boolean ) => {
+		( capability: CollaborationCapability, enabled: boolean ) => {
+			const previous = capabilitiesRef.current;
 			const next = enabled
-				? [ ...new Set( [ ...capabilities, capability ] ) ]
-				: capabilities.filter( ( item ) => item !== capability );
+				? [ ...new Set( [ ...previous, capability ] ) ]
+				: previous.filter( ( item ) => item !== capability );
 
 			setCapabilities( next );
+			capabilitiesRef.current = next;
 
-			if ( ! tokenRef.current ) {
-				return;
-			}
+			pendingRef.current = pendingRef.current
+				.catch( () => {} )
+				.then( async () => {
+					if ( ! tokenRef.current ) {
+						return;
+					}
 
-			try {
-				setRequest(
-					await apiFetch< CollaborationRequest >( {
-						path: `${ REST_BASE }/${ tokenRef.current }`,
-						method: 'PUT',
-						data: { capabilities: next },
-					} )
-				);
-			} catch ( error ) {
-				setCapabilities( capabilities );
+					try {
+						setRequest(
+							await apiFetch< CollaborationRequest >( {
+								path: `${ REST_BASE }/${ tokenRef.current }`,
+								method: 'PUT',
+								data: { capabilities: next },
+							} )
+						);
+					} catch ( error ) {
+						setCapabilities( previous );
+						capabilitiesRef.current = previous;
 
-				void createErrorNotice(
-					getErrorMessage(
-						error,
-						__(
-							'What the collaborator is allowed to do could not be changed.',
-							'public-collaboration'
-						)
-					),
-					{ type: 'snackbar' }
-				);
-			}
+						void createErrorNotice(
+							getErrorMessage(
+								error,
+								__(
+									'What the collaborator is allowed to do could not be changed.',
+									'public-collaboration'
+								)
+							),
+							{ type: 'snackbar' }
+						);
+					}
+				} );
 		},
-		[ capabilities, createErrorNotice ]
+		[ createErrorNotice ]
 	);
 
 	// Watch for somebody turning up, and for the link going stale.
@@ -193,9 +268,14 @@ export function useCollaborationRequest() {
 				current = await apiFetch< CollaborationRequest >( {
 					path: `${ REST_BASE }/${ token }`,
 				} );
-			} catch {
-				// A 404 means the link expired or was cleaned up server-side.
-				if ( ! cancelled ) {
+			} catch ( error ) {
+				/*
+				 * Only a 404 means the link is gone. Anything else — a blip, a
+				 * server error — says nothing about whether it is still live,
+				 * and closing the dialog over one would take the URL away while
+				 * leaving the link working.
+				 */
+				if ( ! cancelled && isNotFound( error ) ) {
 					setRequest( null );
 					void createErrorNotice(
 						__(
@@ -205,6 +285,7 @@ export function useCollaborationRequest() {
 						{ type: 'snackbar' }
 					);
 				}
+
 				return;
 			}
 
@@ -247,7 +328,9 @@ export function useCollaborationRequest() {
 	// Never leave a working link behind when the editor moves on.
 	useEffect(
 		() => () => {
-			void revoke( tokenRef.current );
+			if ( tokenRef.current ) {
+				void revoke( tokenRef.current );
+			}
 		},
 		[ revoke ]
 	);
@@ -256,6 +339,7 @@ export function useCollaborationRequest() {
 		request,
 		capabilities,
 		isCreating,
+		isRevoking,
 		/** Whether the post has been saved at least once, so it has something to share. */
 		canShare: ! isNew && typeof postId === 'number' && postId > 0,
 		create,

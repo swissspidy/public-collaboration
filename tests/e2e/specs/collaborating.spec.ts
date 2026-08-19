@@ -22,7 +22,7 @@ test.describe( 'Following a collaboration link', () => {
 		await secondPage.goto( url );
 
 		await expect( secondPage ).toHaveURL(
-			new RegExp( `post=${ postId }` )
+			new RegExp( `[?&]post=${ postId }(&|$)` )
 		);
 
 		const welcome = secondPage.getByRole( 'dialog', {
@@ -69,6 +69,7 @@ test.describe( 'Following a collaboration link', () => {
 
 	test( 'only offers what the link was shared with', async ( {
 		admin,
+		page,
 		secondPage,
 		collaboration,
 		createDraft,
@@ -80,8 +81,22 @@ test.describe( 'Following a collaboration link', () => {
 			.getDialog()
 			.getByRole( 'checkbox', { name: 'Upload media files' } );
 
+		/*
+		 * The tick is optimistic — the request that takes the capability away
+		 * is still in flight. Following the link before it lands would greet
+		 * the collaborator with the capability they were not meant to have, and
+		 * the assertion below would pass only because the dialog rendered late.
+		 */
+		const saved = page.waitForResponse(
+			( response ) =>
+				response.url().includes( 'collaboration-requests' ) &&
+				'GET' !== response.request().method() &&
+				response.ok()
+		);
+
 		await upload.click();
 		await expect( upload ).not.toBeChecked();
+		await saved;
 
 		await secondPage.goto( url );
 

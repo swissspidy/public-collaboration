@@ -35,13 +35,16 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            # --with-deps shells out to apt, which can sit forever behind the
-            # runner's own unattended-upgrades holding the dpkg lock. Ten
-            # minutes is far longer than the install takes when apt is free, so
-            # a longer wait than that is a stuck lock, not a slow download.
+            # No --with-deps. Every library Chromium needs is already on the
+            # runner image at the newest version — all that flag added was a
+            # handful of optional CJK and emoji font packages, fetched over an
+            # Ubuntu mirror that has taken upwards of seven minutes for a single
+            # 3.5 MB file and timed this job out. Nothing here renders CJK text
+            # or compares screenshots, so the fonts buy nothing. The timeout
+            # stays as a canary: without apt in the way this takes seconds.
             - name: Install Playwright browsers
-              timeout-minutes: 10
-              run: npx playwright install --with-deps chromium
+              timeout-minutes: 5
+              run: npx playwright install chromium
 
             - name: Build plugin
               run: npm run build

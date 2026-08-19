@@ -528,4 +528,60 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 		$this->assertContains( $other_id, $ids );
 		$this->assertContains( self::$post_id, $ids );
 	}
+
+	/**
+	 * Listing media in `edit` context is gated on the same `edit_posts` the
+	 * editor cannot start without, so a guest could otherwise page through the
+	 * whole library.
+	 *
+	 * @covers \PublicCollaboration\filter_rest_attachment_query
+	 */
+	public function test_a_collaborator_only_sees_media_they_uploaded(): void {
+		$data = $this->create_request();
+
+		$collaboration_request = Collaboration_Request::get_by_token( $data['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $collaboration_request );
+
+		$user_id = $collaboration_request->get_or_create_user();
+
+		$this->assertNotWPError( $user_id );
+
+		$somebody_elses = self::factory()->attachment->create_object(
+			[
+				'file'           => 'somebody-elses.jpg',
+				'post_mime_type' => 'image/jpeg',
+				'post_author'    => self::$admin_id,
+			]
+		);
+
+		$theirs = self::factory()->attachment->create_object(
+			[
+				'file'           => 'theirs.jpg',
+				'post_mime_type' => 'image/jpeg',
+				'post_author'    => $user_id,
+			]
+		);
+
+		wp_set_current_user( $user_id );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/media' );
+		$request->set_param( 'context', 'edit' );
+
+		$ids = wp_list_pluck( (array) rest_get_server()->dispatch( $request )->get_data(), 'id' );
+
+		$this->assertContains( $theirs, $ids );
+		$this->assertNotContains( $somebody_elses, $ids );
+
+		// Everybody else still sees the whole library.
+		wp_set_current_user( self::$admin_id );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/media' );
+		$request->set_param( 'context', 'edit' );
+
+		$ids = wp_list_pluck( (array) rest_get_server()->dispatch( $request )->get_data(), 'id' );
+
+		$this->assertContains( $theirs, $ids );
+		$this->assertContains( $somebody_elses, $ids );
+	}
 }

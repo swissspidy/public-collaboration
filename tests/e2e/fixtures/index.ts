@@ -38,7 +38,7 @@ class Collaboration {
 		// The sidebar shows the block's settings instead whenever a block is
 		// selected, and which tab is showing depends on what the test did
 		// before this. Some editor versions have no tabs at all.
-		const tab = region.getByRole( 'tab', { name: 'Post' } );
+		const tab = region.getByRole( 'tab', { name: 'Post' } ).first();
 
 		if ( await tab.count() ) {
 			await tab.click();
@@ -111,6 +111,8 @@ export const test = base.extend< E2EFixture, {} >( {
 	},
 
 	createDraft: async ( { requestUtils }, use ) => {
+		const created: number[] = [];
+
 		const createDraft = async ( title: string ): Promise< number > => {
 			const post = await ( requestUtils as RequestUtils ).rest< {
 				id: number;
@@ -120,11 +122,23 @@ export const test = base.extend< E2EFixture, {} >( {
 				data: { title, status: 'draft' },
 			} );
 
+			created.push( post.id );
+
 			return post.id;
 		};
 
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		await use( createDraft );
+
+		// Otherwise every run leaves its drafts behind, and later runs assert
+		// against a list that keeps growing.
+		for ( const id of created ) {
+			await ( requestUtils as RequestUtils ).rest( {
+				method: 'DELETE',
+				path: `/wp/v2/posts/${ id }`,
+				params: { force: true },
+			} );
+		}
 	},
 
 	secondPage: async ( { browser }, use ) => {

@@ -530,12 +530,46 @@ function unhook_post_lock_heartbeat(): void {
 function register_rest_guards(): void {
 	foreach ( get_post_types( [ 'show_in_rest' => true ], 'objects' ) as $post_type ) {
 		if ( 'attachment' === $post_type->name ) {
+			// Creating one is what uploading *is*, and it is gated on a
+			// capability instead. Listing them still needs narrowing.
+			add_filter( 'rest_attachment_query', __NAMESPACE__ . '\filter_rest_attachment_query', 10, 2 );
+
 			continue;
 		}
 
 		add_filter( "rest_pre_insert_{$post_type->name}", __NAMESPACE__ . '\filter_rest_pre_insert', 10, 2 );
 		add_filter( "rest_{$post_type->name}_query", __NAMESPACE__ . '\filter_rest_query', 10, 2 );
 	}
+}
+
+/**
+ * Keeps a collaborator's `edit` context media to what they uploaded themselves.
+ *
+ * Listing media in `edit` context is gated on the same `edit_posts` capability
+ * the editor cannot start without, so without this a fifteen-minute guest could
+ * page through the whole media library. Their own uploads are what they need to
+ * finish the job; media already in the post arrives with the post's content, not
+ * from a listing.
+ *
+ * @param array           $args    Query arguments.
+ * @param WP_REST_Request $request Request object.
+ * @return array Filtered query arguments.
+ *
+ * @phpstan-param array<string, mixed> $args
+ * @phpstan-return array<string, mixed>
+ */
+function filter_rest_attachment_query( array $args, $request ): array {
+	if ( 'edit' !== $request['context'] ) {
+		return $args;
+	}
+
+	if ( ! Collaboration_Request::get_for_user( get_current_user_id() ) instanceof Collaboration_Request ) {
+		return $args;
+	}
+
+	$args['author'] = get_current_user_id();
+
+	return $args;
 }
 
 /**

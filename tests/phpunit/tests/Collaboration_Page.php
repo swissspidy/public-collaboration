@@ -15,7 +15,7 @@ use WP_UnitTestCase;
 use function PublicCollaboration\filter_template_include;
 
 /**
- * @coversDefaultClass \PublicCollaboration
+ * Tests for the collaboration page.
  */
 class Test_Collaboration_Page extends WP_UnitTestCase {
 	use Intercepts_Redirects;
@@ -55,11 +55,6 @@ class Test_Collaboration_Page extends WP_UnitTestCase {
 		);
 	}
 
-	/**
-	 * Sets up each test.
-	 *
-	 * @return void
-	 */
 	/**
 	 * Creates a collaboration request and visits its link.
 	 *

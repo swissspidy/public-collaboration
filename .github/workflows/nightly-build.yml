@@ -12,15 +12,20 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: false
 
-permissions:
-    contents: write
-    pages: write
-    id-token: write
+permissions: {}
 
 jobs:
     build:
         name: Nightly Build
         runs-on: ubuntu-latest
+
+        # Only to move the `nightly` tag. Pages deployment needs different
+        # permissions and gets them on the job that actually deploys.
+        permissions:
+            contents: write
+
+        outputs:
+            deployable: ${{ steps.artifact.outputs.uploaded }}
 
         steps:
             - name: Checkout
@@ -146,6 +151,11 @@ jobs:
               if: ${{ env.CURRENT_TAG != 'nightly' }}
               uses: actions/upload-pages-artifact@v5
 
+            - name: Record that there is something to deploy
+              id: artifact
+              if: ${{ env.CURRENT_TAG != 'nightly' }}
+              run: echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
             - name: Tag current commit
               if: ${{ env.CURRENT_TAG != 'nightly' }}
               run: |
@@ -162,6 +172,15 @@ jobs:
             url: ${{ steps.deployment.outputs.page_url }}
         runs-on: ubuntu-latest
         needs: build
+
+        # Nothing was built when HEAD already carries the nightly tag, and
+        # deploy-pages fails outright when there is no artifact to deploy.
+        if: ${{ needs.build.outputs.deployable == 'true' }}
+
+        permissions:
+            pages: write
+            id-token: write
+
         steps:
             - name: Deploy to GitHub Pages
               id: deployment

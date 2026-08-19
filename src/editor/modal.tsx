@@ -49,6 +49,8 @@ interface CollaborationModalProps {
 		capability: CollaborationCapability,
 		enabled: boolean
 	) => void;
+	/** Whether the link is being revoked right now. */
+	isRevoking: boolean;
 	/** Called when the person closes the dialog. */
 	onRequestClose: () => void;
 }
@@ -60,12 +62,14 @@ interface CollaborationModalProps {
  * @param props.request            The collaboration request being shown.
  * @param props.capabilities       What the collaborator is currently allowed to do.
  * @param props.onToggleCapability Called when a capability is ticked or unticked.
+ * @param props.isRevoking         Whether the link is being revoked right now.
  * @param props.onRequestClose     Called when the person closes the dialog.
  */
 export function CollaborationModal( {
 	request,
 	capabilities,
 	onToggleCapability,
+	isRevoking,
 	onRequestClose,
 }: CollaborationModalProps ) {
 	const { createNotice } = useDispatch( noticesStore );
@@ -172,6 +176,9 @@ export function CollaborationModal( {
 					__next40pxDefaultSize
 					variant="tertiary"
 					onClick={ onRequestClose }
+					isBusy={ isRevoking }
+					disabled={ isRevoking }
+					accessibleWhenDisabled
 				>
 					{ __( 'Revoke link', 'public-collaboration' ) }
 				</Button>
