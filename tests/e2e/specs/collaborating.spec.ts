@@ -25,11 +25,22 @@ test.describe( 'Following a collaboration link', () => {
 			new RegExp( `[?&]post=${ postId }(&|$)` )
 		);
 
+		/*
+		 * goto() resolves on the navigation, not on the editor being usable.
+		 * Everything this plugin renders is mounted by the editor once it has
+		 * booted, and a cold boot in CI takes considerably longer than the
+		 * default assertion timeout — so wait for the editor itself first, and
+		 * fail here rather than on a dialog that was never going to exist yet.
+		 */
+		await expect(
+			secondPage.getByRole( 'region', { name: 'Editor top bar' } )
+		).toBeVisible( { timeout: 60_000 } );
+
 		const welcome = secondPage.getByRole( 'dialog', {
 			name: 'You have been invited to help',
 		} );
 
-		await expect( welcome ).toBeVisible();
+		await expect( welcome ).toBeVisible( { timeout: 30_000 } );
 		await expect( welcome ).toContainText( 'Shared with a stranger' );
 		await expect( welcome ).toContainText(
 			'edit the content of this one post'
@@ -100,11 +111,22 @@ test.describe( 'Following a collaboration link', () => {
 
 		await secondPage.goto( url );
 
+		/*
+		 * goto() resolves on the navigation, not on the editor being usable.
+		 * Everything this plugin renders is mounted by the editor once it has
+		 * booted, and a cold boot in CI takes considerably longer than the
+		 * default assertion timeout — so wait for the editor itself first, and
+		 * fail here rather than on a dialog that was never going to exist yet.
+		 */
+		await expect(
+			secondPage.getByRole( 'region', { name: 'Editor top bar' } )
+		).toBeVisible( { timeout: 60_000 } );
+
 		const welcome = secondPage.getByRole( 'dialog', {
 			name: 'You have been invited to help',
 		} );
 
-		await expect( welcome ).toBeVisible();
+		await expect( welcome ).toBeVisible( { timeout: 30_000 } );
 		await expect( welcome ).toContainText(
 			'edit the content of this one post'
 		);
