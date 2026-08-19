@@ -14,6 +14,7 @@ use WP_REST_Request;
 use WP_UnitTestCase;
 
 use function PublicCollaboration\delete_expired_requests;
+use function PublicCollaboration\enqueue_block_editor_assets;
 use function PublicCollaboration\filter_cron_schedules;
 use function PublicCollaboration\filter_rest_pre_insert;
 use function PublicCollaboration\get_collaborator_data;
@@ -501,5 +502,79 @@ class Test_Functions extends WP_UnitTestCase {
 		wp_set_current_user( $user_id );
 		unhook_post_lock_heartbeat();
 		$this->assertFalse( has_filter( 'heartbeat_received', 'wp_refresh_post_lock' ) );
+	}
+
+	/**
+	 * Enqueued scripts leak between tests, and this suite asserts on them.
+	 *
+	 * @return void
+	 */
+	private function reset_scripts(): void {
+		$GLOBALS['wp_scripts'] = new \WP_Scripts(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		\PublicCollaboration\register_assets();
+	}
+
+	/**
+	 * The welcome dialog is the only thing telling a collaborator where they
+	 * are, and it renders from data printed alongside its own bundle.
+	 *
+	 * @covers \PublicCollaboration\enqueue_block_editor_assets
+	 */
+	public function test_a_collaborator_is_given_the_welcome_bundle(): void {
+		[ , $user_id ] = $this->create_collaborator( [ 'edit' ] );
+
+		$this->reset_scripts();
+		wp_set_current_user( $user_id );
+
+		enqueue_block_editor_assets();
+
+		$this->assertTrue(
+			wp_script_is( 'public-collaboration-welcome', 'enqueued' ),
+			'The collaborator gets the welcome bundle.'
+		);
+		$this->assertFalse(
+			wp_script_is( 'public-collaboration-editor', 'enqueued' ),
+			'And not the sharing UI, which is of no use to them.'
+		);
+
+		$before = wp_scripts()->get_data( 'public-collaboration-welcome', 'before' );
+
+		$this->assertIsArray( $before );
+
+		$printed = implode( "\n", array_filter( $before, 'is_string' ) );
+
+		$this->assertStringContainsString(
+			'window.publicCollaboration =',
+			$printed,
+			'The dialog renders from this and nothing else.'
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\enqueue_block_editor_assets
+	 */
+	public function test_whoever_shared_the_post_is_given_the_sharing_bundle(): void {
+		$this->reset_scripts();
+		wp_set_current_user( self::$admin_id );
+
+		enqueue_block_editor_assets();
+
+		$this->assertTrue( wp_script_is( 'public-collaboration-editor', 'enqueued' ) );
+		$this->assertFalse( wp_script_is( 'public-collaboration-welcome', 'enqueued' ) );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\enqueue_block_editor_assets
+	 */
+	public function test_a_subscriber_is_given_nothing(): void {
+		$subscriber = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+
+		$this->reset_scripts();
+		wp_set_current_user( $subscriber );
+
+		enqueue_block_editor_assets();
+
+		$this->assertFalse( wp_script_is( 'public-collaboration-editor', 'enqueued' ) );
+		$this->assertFalse( wp_script_is( 'public-collaboration-welcome', 'enqueued' ) );
 	}
 }

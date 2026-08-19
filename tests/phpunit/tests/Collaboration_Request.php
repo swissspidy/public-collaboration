@@ -231,12 +231,30 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	 * @covers ::get_or_create_user
 	 */
 	public function test_get_or_create_user_skips_the_editor_tour(): void {
+		global $wpdb;
+
 		$request = $this->create_request();
 		$user_id = $request->get_or_create_user();
 
 		$this->assertNotWPError( $user_id );
 
-		$preferences = get_user_meta( $user_id, 'persisted_preferences', true );
+		$meta_key = $wpdb->get_blog_prefix() . 'persisted_preferences';
+
+		/*
+		 * Seeding a key of our own invention would be silently useless: the
+		 * editor only ever reads the one core registers for it. The test case
+		 * unregisters every meta key between tests, so register it back before
+		 * asking what it is called.
+		 */
+		wp_register_persisted_preferences_meta();
+
+		$this->assertArrayHasKey(
+			$meta_key,
+			get_registered_meta_keys( 'user' ),
+			'The editor reads its preferences from this key and no other.'
+		);
+
+		$preferences = get_user_meta( $user_id, $meta_key, true );
 
 		$this->assertIsArray( $preferences );
 		$this->assertFalse( $preferences['core/edit-post']['welcomeGuide'] );
