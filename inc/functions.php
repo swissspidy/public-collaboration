@@ -534,7 +534,45 @@ function register_rest_guards(): void {
 		}
 
 		add_filter( "rest_pre_insert_{$post_type->name}", __NAMESPACE__ . '\filter_rest_pre_insert', 10, 2 );
+		add_filter( "rest_{$post_type->name}_query", __NAMESPACE__ . '\filter_rest_query', 10, 2 );
 	}
+}
+
+/**
+ * Keeps a collaborator's `edit` context to the post they were invited to.
+ *
+ * `edit_posts` is granted site-wide because the editor cannot start without it
+ * (see filter_user_has_cap()), and core reads that same capability as
+ * permission to list posts in `edit` context. That context carries `raw`
+ * fields, which for a password-protected post is the body behind the password —
+ * published, so the usual per-post read check waves it through.
+ *
+ * Narrowing the query rather than filtering the response: whatever core adds to
+ * `edit` context later cannot leak through a collection that can only ever
+ * return the one post. `view` context is left alone, so anything a logged-out
+ * visitor could see is still there.
+ *
+ * @param array           $args    Query arguments.
+ * @param WP_REST_Request $request Request object.
+ * @return array Filtered query arguments.
+ *
+ * @phpstan-param array<string, mixed> $args
+ * @phpstan-return array<string, mixed>
+ */
+function filter_rest_query( array $args, $request ): array {
+	if ( 'edit' !== $request['context'] ) {
+		return $args;
+	}
+
+	$collaboration_request = Collaboration_Request::get_for_user( get_current_user_id() );
+
+	if ( ! $collaboration_request instanceof Collaboration_Request ) {
+		return $args;
+	}
+
+	$args['post__in'] = [ $collaboration_request->get_parent_id() ];
+
+	return $args;
 }
 
 /**

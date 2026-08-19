@@ -18,6 +18,7 @@ jobs:
     plugin-check:
         name: Plugin Check
         runs-on: ubuntu-latest
+        timeout-minutes: 20
 
         steps:
             - name: Checkout
@@ -50,6 +51,16 @@ jobs:
                   coverage: none
                   tools: wp-cli
                   github-token: ''
+
+            # `wp package install` hands the job to Composer, which registers
+            # the package as a VCS repository and clones it. Unauthenticated
+            # against the GitHub API (see github-token above), Composer reaches
+            # for the SSH remote, and the runner has no key — so the clone dies
+            # on "Permission denied (publickey)". Rewriting the remote at the
+            # git level fixes it wherever Composer's own config happens to
+            # live, which for `wp package install` is not the global one.
+            - name: Clone GitHub over HTTPS
+              run: git config --global url."https://github.com/".insteadOf "git@github.com:"
 
             # Pinned to 3.1.0, not :@stable: see the comment on the same
             # step in nightly-build.yml — 3.2.0+ requires a wp-cli/wp-cli

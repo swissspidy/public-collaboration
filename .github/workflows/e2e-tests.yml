@@ -18,6 +18,9 @@ jobs:
     e2e-tests:
         name: E2E Tests
         runs-on: ubuntu-latest
+        # Bringing up WordPress and running the suite takes a few minutes; well
+        # past that and something has hung rather than gone slowly.
+        timeout-minutes: 30
 
         steps:
             - name: Checkout
@@ -32,7 +35,12 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            # --with-deps shells out to apt, which can sit forever behind the
+            # runner's own unattended-upgrades holding the dpkg lock. Ten
+            # minutes is far longer than the install takes when apt is free, so
+            # a longer wait than that is a stuck lock, not a slow download.
             - name: Install Playwright browsers
+              timeout-minutes: 10
               run: npx playwright install --with-deps chromium
 
             - name: Build plugin

@@ -35,6 +35,15 @@ class Collaboration {
 			name: 'Editor settings',
 		} );
 
+		// The sidebar shows the block's settings instead whenever a block is
+		// selected, and which tab is showing depends on what the test did
+		// before this. Some editor versions have no tabs at all.
+		const tab = region.getByRole( 'tab', { name: 'Post' } );
+
+		if ( await tab.count() ) {
+			await tab.click();
+		}
+
 		const toggle = region.getByRole( 'button', {
 			name: 'Public collaboration',
 		} );

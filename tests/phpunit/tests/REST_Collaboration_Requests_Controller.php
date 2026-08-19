@@ -462,4 +462,70 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 			array_keys( $schema['properties'] )
 		);
 	}
+
+	/**
+	 * `edit` context carries `raw` fields — for a password-protected post, the
+	 * body behind the password. Granting `edit_posts` is what lets core list
+	 * posts in that context at all, so the collection has to be narrowed.
+	 *
+	 * @covers \PublicCollaboration\filter_rest_query
+	 */
+	public function test_a_collaborator_cannot_read_other_posts_in_edit_context(): void {
+		$secret_id = self::factory()->post->create(
+			[
+				'post_status'   => 'publish',
+				'post_password' => 'hunter2',
+				'post_content'  => 'Behind the password.',
+				'post_author'   => self::$admin_id,
+			]
+		);
+
+		$data = $this->create_request();
+
+		$collaboration_request = Collaboration_Request::get_by_token( $data['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $collaboration_request );
+
+		$user_id = $collaboration_request->get_or_create_user();
+
+		$this->assertNotWPError( $user_id );
+
+		wp_set_current_user( $user_id );
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/posts' );
+		$request->set_param( 'context', 'edit' );
+
+		$response = rest_get_server()->dispatch( $request );
+		$ids      = wp_list_pluck( (array) $response->get_data(), 'id' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertNotContains( $secret_id, $ids );
+		$this->assertSame( [ self::$post_id ], $ids, 'Only the shared post is theirs to read.' );
+
+		// The single-post route was already closed by core; check it stays shut.
+		$request = new WP_REST_Request( 'GET', '/wp/v2/posts/' . $secret_id );
+		$request->set_param( 'context', 'edit' );
+
+		$this->assertErrorResponse( 'rest_forbidden_context', rest_get_server()->dispatch( $request ), 403 );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_rest_query
+	 */
+	public function test_everybody_else_still_sees_the_whole_list(): void {
+		$other_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => self::$admin_id,
+			]
+		);
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/posts' );
+		$request->set_param( 'context', 'edit' );
+
+		$ids = wp_list_pluck( (array) rest_get_server()->dispatch( $request )->get_data(), 'id' );
+
+		$this->assertContains( $other_id, $ids );
+		$this->assertContains( self::$post_id, $ids );
+	}
 }

@@ -55,10 +55,14 @@ test.describe( 'Sharing a post', () => {
 		await admin.createNewPost();
 
 		const panel = await collaboration.openPanel();
+		const button = panel.getByRole( 'button', {
+			name: 'Save the post to share it',
+		} );
 
-		await expect(
-			panel.getByRole( 'button', { name: 'Save the post to share it' } )
-		).toBeDisabled();
+		// aria-disabled, not the disabled attribute: the button stays focusable
+		// so that the reason it is unavailable can be read out.
+		await expect( button ).toBeVisible();
+		await expect( button ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
 	test( 'revokes the link server-side when closed, not just in the UI', async ( {
