@@ -82,85 +82,6 @@ class Collaboration {
 	}
 }
 
-/**
- * Whatever the browser complained about, per page.
- *
- * The collaborator's editor is assembled from a bundle, the data printed
- * alongside it, and whatever else the editor decides to render on top. When
- * the dialog fails to turn up, none of that is in a screenshot — but all of it
- * is here.
- */
-const browserComplaints = new WeakMap< Page, string[] >();
-
-/**
- * Describes what the plugin amounts to on a page, for a failing test to print.
- * @param page
- */
-export async function describePage( page: Page ): Promise< string > {
-	const state = await page.evaluate( () => {
-		const wp = (
-			window as unknown as {
-				wp?: {
-					data?: {
-						select?: ( store: string ) => {
-							getCurrentUser?: () => {
-								id?: number;
-								slug?: string;
-								roles?: string[];
-							};
-						};
-					};
-					plugins?: { getPlugins?: () => Array< { name: string } > };
-				};
-			}
-		 ).wp;
-
-		const user = wp?.data?.select?.( 'core' )?.getCurrentUser?.() ?? {};
-
-		return {
-			url: window.location.href,
-			user: `#${ user.id ?? '?' } ${ user.slug ?? '?' } [${ (
-				user.roles ?? []
-			).join( ', ' ) }]`,
-			cookies: document.cookie,
-			data: JSON.stringify( window.publicCollaboration ?? null ),
-			scripts: Array.from( document.scripts )
-				.map( ( script ) => script.id )
-				.filter( ( id ) => id.includes( 'public-collaboration' ) ),
-			plugins: ( wp?.plugins?.getPlugins?.() ?? [] ).map(
-				( plugin ) => plugin.name
-			),
-			dialogs: Array.from(
-				document.querySelectorAll( '[role="dialog"]' )
-			).map( ( dialog ) => ( {
-				label:
-					dialog.getAttribute( 'aria-label' ) ??
-					dialog.querySelector( 'h1, h2' )?.textContent ??
-					'',
-				hidden: !! dialog.closest( '[aria-hidden="true"]' ),
-			} ) ),
-			notices: Array.from(
-				document.querySelectorAll( '.components-notice__content' )
-			).map( ( notice ) => notice.textContent?.trim() ?? '' ),
-		};
-	} );
-
-	return [
-		`url: ${ state.url }`,
-		`user: ${ state.user }`,
-		`cookies: ${ state.cookies || 'none' }`,
-		`window.publicCollaboration: ${ state.data }`,
-		`plugin scripts: ${ state.scripts.join( ', ' ) || 'none' }`,
-		`registered plugins: ${ state.plugins.join( ', ' ) || 'none' }`,
-		`dialogs: ${ JSON.stringify( state.dialogs ) }`,
-		`notices: ${ JSON.stringify( state.notices ) }`,
-		`browser: ${
-			( browserComplaints.get( page ) ?? [] ).join( '\n          ' ) ||
-			'nothing'
-		}`,
-	].join( '\n' );
-}
-
 type E2EFixture = {
 	/** Helpers for the sharing side of the feature. */
 	collaboration: Collaboration;
@@ -237,19 +158,6 @@ export const test = base.extend< E2EFixture, {} >( {
 			storageState: { cookies: [], origins: [] },
 		} );
 		const secondPage = await context.newPage();
-		const complaints: string[] = [];
-
-		browserComplaints.set( secondPage, complaints );
-
-		secondPage.on( 'console', ( message ) => {
-			if ( 'error' === message.type() ) {
-				complaints.push( `console: ${ message.text() }` );
-			}
-		} );
-
-		secondPage.on( 'pageerror', ( error ) => {
-			complaints.push( `uncaught: ${ error.message }` );
-		} );
 
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		await use( secondPage );

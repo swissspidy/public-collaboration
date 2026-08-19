@@ -1,28 +1,9 @@
 /**
  * Internal dependencies
  */
-import { describePage, expect, test } from '../fixtures';
+import { expect, test } from '../fixtures';
 
 test.describe( 'Following a collaboration link', () => {
-	/*
-	 * What the collaborator sees is assembled out of a bundle, the data printed
-	 * beside it, and whatever else the editor puts on top — and a screenshot of
-	 * a missing dialog shows none of that. The report artifact is no help to
-	 * anybody reading a CI log, so put it in the log.
-	 */
-	test.afterEach( async ( { secondPage }, testInfo ) => {
-		if ( testInfo.status === testInfo.expectedStatus ) {
-			return;
-		}
-
-		if ( 'about:blank' === secondPage.url() ) {
-			return;
-		}
-
-		// eslint-disable-next-line no-console
-		console.log( await describePage( secondPage ) );
-	} );
-
 	test( 'lets somebody edit the post without an account', async ( {
 		admin,
 		secondPage,
