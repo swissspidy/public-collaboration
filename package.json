@@ -46,7 +46,7 @@
 		"@wordpress/plugins": "^7.53.0",
 		"@wordpress/preferences": "^4.53.0",
 		"@wordpress/scripts": "^34.1.0",
-		"typescript": "~6.0.3"
+		"typescript": "~7.0.2"
 	},
 	"scripts": {
 		"build": "wp-scripts build",
