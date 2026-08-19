@@ -7,7 +7,7 @@ import { expect, test } from '../fixtures';
  * On a network an account belongs to the network, not to the site it was made
  * on, and the two are removed by different functions — so a temporary account
  * can look gone from the site that lent it while still existing everywhere
- * else. Nothing on a single-site install can tell the difference, which is why
+ * else. Nothing on a single-site install can tell those apart, which is why
  * this runs against a network of its own.
  */
 test.describe( 'On a network', () => {
@@ -27,30 +27,46 @@ test.describe( 'On a network', () => {
 
 		const url = await collaboration.shareLink();
 
-		await secondPage.goto( url );
+		/*
+		 * A second tab rather than this one: revoking is done from the dialog
+		 * the editor is still showing, and navigating away would close it.
+		 */
+		const network = await page.context().newPage();
+
+		// Every temporary account on the network, by the login they are named
+		// with. The network screen rather than the site's own list of users:
+		// the site's would stop showing the account either way.
+		const collaborators = async (): Promise< string[] > =>
+			network.goto( '/wp-admin/network/users.php?s=pubcol' ).then( () =>
+				network
+					.locator( '#the-list' )
+					.getByRole( 'link', { name: /^pubcol_/ } )
+					.allInnerTexts()
+			);
 
 		/*
-		 * Getting this far is the account being made, added to the site, and
-		 * given what the link lends it — all of which has to happen before its
-		 * absence below means anything.
+		 * Which accounts are already there, rather than how many. Every test
+		 * before this one leaves its own behind — their links are left to
+		 * expire rather than revoked — and none of them is the one this is
+		 * about.
 		 */
+		const before = await collaborators();
+
+		await secondPage.goto( url );
+
+		// Getting this far is the account being made, added to the site, and
+		// given what the link lends it.
 		await expect(
 			secondPage.getByRole( 'dialog', {
 				name: 'You have been invited to help',
 			} )
 		).toBeVisible( { timeout: 60_000 } );
 
-		/*
-		 * A second tab rather than this one: revoking is done from the dialog
-		 * the editor is still showing, and navigating away would close it.
-		 */
-		const network = await page.context().newPage();
-		const users = network.locator( '#the-list' );
+		const [ collaborator ] = ( await collaborators() ).filter(
+			( login ) => ! before.includes( login )
+		);
 
-		// Every temporary account this plugin makes is named this way.
-		await network.goto( '/wp-admin/network/users.php?s=pubcol' );
-
-		await expect( users ).toContainText( 'pubcol_' );
+		expect( collaborator ).toBeTruthy();
 
 		await collaboration
 			.getDialog()
@@ -60,15 +76,8 @@ test.describe( 'On a network', () => {
 		// Revoking does not wait for the server before closing the dialog, so
 		// this asks again rather than asserting on a single load.
 		await expect
-			.poll(
-				async () => {
-					await network.reload();
-
-					return users.innerText();
-				},
-				{ timeout: 15_000 }
-			)
-			.toContain( 'No users found.' );
+			.poll( collaborators, { timeout: 15_000 } )
+			.not.toContain( collaborator );
 
 		await network.close();
 	} );
