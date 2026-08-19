@@ -101,13 +101,28 @@ export async function describePage( page: Page ): Promise< string > {
 		const wp = (
 			window as unknown as {
 				wp?: {
+					data?: {
+						select?: ( store: string ) => {
+							getCurrentUser?: () => {
+								id?: number;
+								slug?: string;
+								roles?: string[];
+							};
+						};
+					};
 					plugins?: { getPlugins?: () => Array< { name: string } > };
 				};
 			}
 		 ).wp;
 
+		const user = wp?.data?.select?.( 'core' )?.getCurrentUser?.() ?? {};
+
 		return {
 			url: window.location.href,
+			user: `#${ user.id ?? '?' } ${ user.slug ?? '?' } [${ (
+				user.roles ?? []
+			).join( ', ' ) }]`,
+			cookies: document.cookie,
 			data: JSON.stringify( window.publicCollaboration ?? null ),
 			scripts: Array.from( document.scripts )
 				.map( ( script ) => script.id )
@@ -132,6 +147,8 @@ export async function describePage( page: Page ): Promise< string > {
 
 	return [
 		`url: ${ state.url }`,
+		`user: ${ state.user }`,
+		`cookies: ${ state.cookies || 'none' }`,
 		`window.publicCollaboration: ${ state.data }`,
 		`plugin scripts: ${ state.scripts.join( ', ' ) || 'none' }`,
 		`registered plugins: ${ state.plugins.join( ', ' ) || 'none' }`,

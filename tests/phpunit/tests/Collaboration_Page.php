@@ -12,7 +12,9 @@ namespace PublicCollaboration\Tests;
 use PublicCollaboration\Collaboration_Request;
 use WP_UnitTestCase;
 
+use function PublicCollaboration\enqueue_block_editor_assets;
 use function PublicCollaboration\filter_template_include;
+use function PublicCollaboration\register_assets;
 
 /**
  * Tests for the collaboration page.
@@ -212,5 +214,53 @@ class Test_Collaboration_Page extends WP_UnitTestCase {
 			filter_template_include( self::THEME_TEMPLATE )
 		);
 		$this->assertSame( 0, $request->get_user_id() );
+	}
+
+	/**
+	 * Following a link is two requests, and nothing carries over between them
+	 * but the database — so this covers the handover the same way, with the
+	 * caches emptied in the middle.
+	 *
+	 * @covers \PublicCollaboration\filter_template_include
+	 * @covers \PublicCollaboration\enqueue_block_editor_assets
+	 */
+	public function test_the_editor_the_link_leads_to_knows_who_arrived(): void {
+		wp_set_current_user( 0 );
+
+		$request = $this->go_to_link();
+
+		$this->assertNotNull(
+			$this->catch_redirect(
+				static function () {
+					filter_template_include( self::THEME_TEMPLATE );
+				}
+			),
+			'Following the link leads to the editor.'
+		);
+
+		$user_id = $request->get_user_id();
+
+		$this->assertGreaterThan( 0, $user_id, 'It made an account to get there as.' );
+
+		// Nothing of the first request survives into the second.
+		wp_cache_flush();
+
+		$GLOBALS['wp_scripts'] = new \WP_Scripts(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		register_assets();
+		wp_set_current_user( $user_id );
+
+		$this->assertTrue(
+			current_user_can( 'edit_post', self::$post_id ),
+			'The account can edit the post it was invited to.'
+		);
+
+		enqueue_block_editor_assets();
+
+		$this->assertTrue(
+			wp_script_is( 'public-collaboration-welcome', 'enqueued' ),
+			'And is greeted, rather than handed the sharing UI.'
+		);
+		$this->assertFalse( wp_script_is( 'public-collaboration-editor', 'enqueued' ) );
 	}
 }
