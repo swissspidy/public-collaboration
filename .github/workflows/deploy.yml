@@ -1,0 +1,63 @@
+name: Deploy to WordPress.org
+
+# Only real releases — not the nightly build's own moving `nightly` tag, and
+# not pre-releases.
+on:
+    release:
+        types: [released]
+
+jobs:
+    deploy:
+        name: Deploy to WP.org
+        runs-on: ubuntu-latest
+        # Needed to attach the built zip to the GitHub release below.
+        permissions:
+            contents: write
+
+        steps:
+            # persist-credentials: false — this job never needs git to push or
+            # fetch with the runner's token (SVN is what actually publishes),
+            # and softprops/action-gh-release below authenticates on its own
+            # via github.token regardless. No reason to leave a write-scoped
+            # token sitting in the git config for the rest of the job.
+            #
+            # Every step below is pinned to a commit SHA rather than a
+            # version tag: unlike this repo's other workflows, this one
+            # handles real SVN write credentials, so a compromised or
+            # retagged action here is a credential-exfiltration path, not
+            # just a broken CI run.
+            - name: Checkout
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  node-version-file: '.nvmrc'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build plugin
+              run: npm run build
+
+            # Reads .distignore to decide what ships (the same file `wp
+            # dist-archive` uses elsewhere in this repo) and moves
+            # .wordpress-org/ to the top-level `assets` directory in SVN —
+            # the banner, icon, and screenshots shown on the directory page,
+            # kept separate from the plugin's own `trunk`.
+            - name: Deploy to WordPress.org
+              id: deploy
+              uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # stable
+              with:
+                  generate-zip: true
+              env:
+                  SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+                  SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+
+            - name: Attach ZIP to the release
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+              with:
+                  files: ${{ steps.deploy.outputs.zip-path }}

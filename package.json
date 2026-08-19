@@ -1,0 +1,64 @@
+{
+	"name": "public-collaboration",
+	"version": "0.1.0",
+	"description": "Share a link that lets someone edit one post with you for fifteen minutes. No account, no login, no invitation email.",
+	"author": "Pascal Birchler",
+	"license": "GPL-2.0-or-later",
+	"keywords": [
+		"wordpress",
+		"wordpress-plugin",
+		"collaboration",
+		"editor",
+		"qrcode"
+	],
+	"homepage": "https://github.com/swissspidy/public-collaboration",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/swissspidy/public-collaboration.git"
+	},
+	"bugs": {
+		"url": "https://github.com/swissspidy/public-collaboration/issues"
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"private": true,
+	"dependencies": {
+		"qrcode.react": "^4.2.0"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.62.1",
+		"@types/react": "^19.2.18",
+		"@types/react-dom": "^19.2.4",
+		"@wordpress/api-fetch": "^7.53.0",
+		"@wordpress/components": "^39.0.0",
+		"@wordpress/compose": "^8.6.0",
+		"@wordpress/core-data": "^7.53.0",
+		"@wordpress/data": "^10.53.0",
+		"@wordpress/e2e-test-utils-playwright": "^1.53.0",
+		"@wordpress/editor": "^14.53.0",
+		"@wordpress/element": "^8.5.0",
+		"@wordpress/env": "^11.13.0",
+		"@wordpress/hooks": "^4.53.0",
+		"@wordpress/i18n": "^6.26.0",
+		"@wordpress/icons": "^15.4.0",
+		"@wordpress/notices": "^5.53.0",
+		"@wordpress/plugins": "^7.53.0",
+		"@wordpress/preferences": "^4.53.0",
+		"@wordpress/scripts": "^34.1.0",
+		"typescript": "~6.0.3"
+	},
+	"scripts": {
+		"build": "wp-scripts build",
+		"start": "wp-scripts start",
+		"format": "wp-scripts format",
+		"lint:css": "wp-scripts lint-style",
+		"lint:js": "wp-scripts lint-js",
+		"lint:js:fix": "wp-scripts lint-js --fix",
+		"lint:pkg-json": "wp-scripts lint-pkg-json",
+		"typecheck": "tsc --noEmit",
+		"wp-env": "wp-env",
+		"test:unit": "wp-scripts test-unit-js",
+		"test:e2e": "wp-scripts test-playwright --config tests/e2e/playwright.config.ts"
+	}
+}

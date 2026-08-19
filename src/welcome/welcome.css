@@ -1,0 +1,20 @@
+.public-collaboration-welcome {
+	max-width: 28rem;
+}
+
+.public-collaboration-welcome p {
+	margin: 0 0 1em;
+}
+
+.public-collaboration-welcome__capabilities {
+	margin: 0 0 1.5em;
+	padding-left: 1.25em;
+	list-style: disc;
+	color: #757575;
+}
+
+.public-collaboration-welcome__actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 1.5em;
+}
