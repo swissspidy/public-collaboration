@@ -1,13 +1,86 @@
 /**
  * External dependencies
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import type { Locator, Page } from '@playwright/test';
+import { addCoverageReport } from 'monocart-reporter';
+import type { V8CoverageEntry } from 'monocart-coverage-reports';
 
 /**
  * WordPress dependencies
  */
 import { Editor, test as base } from '@wordpress/e2e-test-utils-playwright';
 import type { RequestUtils } from '@wordpress/e2e-test-utils-playwright';
+
+/**
+ * Whether this run is measuring what of the plugin the tests reach.
+ *
+ * V8's coverage is Chromium's, and asking for it costs a little on every page,
+ * so it is off unless the run was started to collect it.
+ * @param browserName
+ */
+function collectsCoverage( browserName: string ): boolean {
+	return (
+		'chromium' === browserName && 'true' === process.env.COLLECT_COVERAGE
+	);
+}
+
+/**
+ * Attaches the source map webpack wrote beside a bundle, if it is missing.
+ *
+ * Without one, what gets reported is coverage of the bundle rather than of the
+ * files it was built from. Monocart resolves most of them itself; the ones it
+ * does not are the ones WordPress serves with a `?ver=` query on the end.
+ * @param entry
+ */
+function withSourceMap( entry: V8CoverageEntry ): V8CoverageEntry {
+	if ( entry.sourceMap || ! entry.url.includes( '/build/' ) ) {
+		return entry;
+	}
+
+	const bundle = entry.url
+		.slice( entry.url.indexOf( 'build/' ) )
+		.split( '?' )[ 0 ];
+	const map = resolve( __dirname, '../../..', `${ bundle }.map` );
+
+	if ( existsSync( map ) ) {
+		entry.sourceMap = JSON.parse( readFileSync( map, 'utf-8' ) );
+	}
+
+	return entry;
+}
+
+/**
+ * Records what of the plugin's own bundles a page ran, for the report.
+ *
+ * Coverage is per-page, and the collaborator browses in a page of their own, so
+ * every page a test opens has to be asked separately.
+ * @param page
+ */
+async function startCoverage( page: Page ): Promise< void > {
+	await Promise.all( [
+		page.coverage.startJSCoverage( { resetOnNavigation: false } ),
+		page.coverage.startCSSCoverage( { resetOnNavigation: false } ),
+	] );
+}
+
+/**
+ * Hands what a page ran to the reporter.
+ * @param page
+ */
+async function stopCoverage( page: Page ): Promise< void > {
+	const [ js, css ] = await Promise.all( [
+		page.coverage.stopJSCoverage(),
+		page.coverage.stopCSSCoverage(),
+	] );
+
+	await addCoverageReport(
+		( [ ...js, ...css ] as V8CoverageEntry[] ).map( withSourceMap ),
+		test.info()
+	);
+}
 
 /**
  * Helpers for the sharing side of the feature.
@@ -106,6 +179,22 @@ type E2EFixture = {
 };
 
 export const test = base.extend< E2EFixture, {} >( {
+	page: async ( { page, browserName }, use ) => {
+		if ( ! collectsCoverage( browserName ) ) {
+			// eslint-disable-next-line react-hooks/rules-of-hooks
+			await use( page );
+
+			return;
+		}
+
+		await startCoverage( page );
+
+		// eslint-disable-next-line react-hooks/rules-of-hooks
+		await use( page );
+
+		await stopCoverage( page );
+	},
+
 	collaboration: async ( { page, editor }, use ) => {
 		// Playwright's own fixture convention, not a React hook — the callback
 		// just happens to be named `use`, which is enough to trip a lint rule
@@ -145,7 +234,7 @@ export const test = base.extend< E2EFixture, {} >( {
 		}
 	},
 
-	secondPage: async ( { browser }, use ) => {
+	secondPage: async ( { browser, browserName }, use ) => {
 		/*
 		 * `storageState` in the shared Playwright config points at the
 		 * administrator's saved session, and a context made here picks it up.
@@ -158,9 +247,18 @@ export const test = base.extend< E2EFixture, {} >( {
 			storageState: { cookies: [], origins: [] },
 		} );
 		const secondPage = await context.newPage();
+		const measured = collectsCoverage( browserName );
+
+		if ( measured ) {
+			await startCoverage( secondPage );
+		}
 
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		await use( secondPage );
+
+		if ( measured ) {
+			await stopCoverage( secondPage );
+		}
 
 		await context.close();
 	},

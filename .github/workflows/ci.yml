@@ -75,10 +75,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                # The floor the plugin claims, and something current. WordPress
-                # itself is pinned to the release this plugin targets, in
-                # .wp-env.json, so there is nothing to vary there.
-                php: ['8.0', '8.4']
+                # Every version between the floor the plugin claims and the
+                # newest there is. WordPress itself is pinned to the release
+                # this plugin targets, in .wp-env.json, so there is nothing to
+                # vary there.
+                php: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
 
         env:
             WP_ENV_PHP_VERSION: ${{ matrix.php }}
@@ -110,12 +111,13 @@ jobs:
               uses: ramsey/composer-install@v4
 
             # Coverage only on one leg — Xdebug roughly doubles the run, and one
-            # upload per push is all codecov needs.
+            # upload per push is all codecov needs. The newest PHP is the
+            # fastest, which is some of that back.
             - name: Start WordPress
-              run: ./node_modules/.bin/wp-env start ${{ matrix.php == '8.4' && '--xdebug=coverage' || '' }}
+              run: ./node_modules/.bin/wp-env start ${{ matrix.php == '8.5' && '--xdebug=coverage' || '' }}
 
             - name: Create coverage output directory
-              if: ${{ matrix.php == '8.4' }}
+              if: ${{ matrix.php == '8.5' }}
               run: mkdir -p artifacts
 
             # Run wp-env directly: `npm run` swallows `--env-cwd` as an npm config
@@ -126,11 +128,12 @@ jobs:
                   ./node_modules/.bin/wp-env run tests-cli
                   --env-cwd=wp-content/plugins/public-collaboration
                   vendor/bin/phpunit
-                  ${{ matrix.php == '8.4' && '--coverage-clover artifacts/coverage.xml' || '' }}
+                  ${{ matrix.php == '8.5' && '--coverage-clover artifacts/coverage.xml' || '' }}
 
             - name: Upload code coverage report
               uses: codecov/codecov-action@v7.0.0
-              if: ${{ matrix.php == '8.4' }}
+              if: ${{ matrix.php == '8.5' }}
               with:
                   files: artifacts/coverage.xml
+                  flags: unit
                   token: ${{ secrets.CODECOV_TOKEN }}

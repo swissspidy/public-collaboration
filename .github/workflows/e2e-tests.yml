@@ -16,11 +16,19 @@ permissions: {}
 
 jobs:
     e2e-tests:
-        name: E2E Tests
+        name: E2E Tests (${{ matrix.multisite && 'multisite' || 'single site' }})
         runs-on: ubuntu-latest
         # Bringing up WordPress and running the suite takes a few minutes; well
         # past that and something has hung rather than gone slowly.
         timeout-minutes: 30
+
+        strategy:
+            fail-fast: false
+            matrix:
+                # Temporary accounts are network-wide on multisite and site-wide
+                # everywhere else, and the difference is invisible until the
+                # suite is run against both.
+                multisite: [false, true]
 
         steps:
             - name: Checkout
@@ -46,8 +54,22 @@ jobs:
               timeout-minutes: 5
               run: npx playwright install chromium
 
+            # The coverage leg needs source maps, or what V8 reports back is
+            # coverage of a bundle rather than of the TypeScript in this repo.
+            # The other leg builds the way a release does, so that the suite
+            # runs against production output at least once.
             - name: Build plugin
               run: npm run build
+              env:
+                  WP_DEVTOOL: ${{ matrix.multisite && '' || 'source-map' }}
+                  NODE_ENV: ${{ matrix.multisite && '' || 'development' }}
+
+            # `multisite` cannot be passed on the command line or through the
+            # environment, so the committed configuration is copied into the
+            # file wp-env merges on top of .wp-env.json.
+            - name: Configure a network
+              if: ${{ matrix.multisite }}
+              run: cp .wp-env.multisite.json .wp-env.override.json
 
             # Brings up the WordPress release this plugin targets, with the
             # Gutenberg plugin it depends on — see .wp-env.json. WordPress
@@ -57,11 +79,24 @@ jobs:
 
             - name: Run tests
               run: npm run test:e2e
+              env:
+                  # One upload per push is all codecov needs, and the two legs
+                  # run the same specs.
+                  COLLECT_COVERAGE: ${{ matrix.multisite && 'false' || 'true' }}
+                  WP_MULTISITE: ${{ matrix.multisite && 'true' || 'false' }}
+
+            - name: Upload code coverage report
+              uses: codecov/codecov-action@v7.0.0
+              if: ${{ !matrix.multisite }}
+              with:
+                  files: artifacts/e2e-coverage/coverage/codecov.json
+                  flags: e2e
+                  token: ${{ secrets.CODECOV_TOKEN }}
 
             - name: Archive debug artifacts (screenshots, HTML snapshots)
               uses: actions/upload-artifact@v7
               if: always()
               with:
-                  name: failures-artifacts
+                  name: failures-artifacts-${{ matrix.multisite && 'multisite' || 'single-site' }}
                   path: artifacts
                   if-no-files-found: ignore
