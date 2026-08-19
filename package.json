@@ -46,6 +46,8 @@
 		"@wordpress/plugins": "^7.53.0",
 		"@wordpress/preferences": "^4.53.0",
 		"@wordpress/scripts": "^34.1.0",
+		"monocart-coverage-reports": "^2.12.12",
+		"monocart-reporter": "^2.12.5",
 		"typescript": "~6.0.3"
 	},
 	"scripts": {
