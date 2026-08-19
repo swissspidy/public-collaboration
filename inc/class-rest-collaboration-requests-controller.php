@@ -134,7 +134,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			);
 		}
 
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( $this->is_collaborator() || ! current_user_can( 'edit_post', $post_id ) ) {
 			return new WP_Error(
 				'public_collaboration_cannot_share',
 				__( 'Sorry, you are not allowed to share this post for collaboration.', 'public-collaboration' ),
@@ -288,6 +288,21 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Whether the current user is here on a collaboration link themselves.
+	 *
+	 * Being able to edit the post is what decides who may manage its links, and
+	 * a collaborator can edit the post — that is the whole point of the link
+	 * they followed. Without this they could use the invitation they were given
+	 * to mint more, and go on doing so long after the fifteen minutes they were
+	 * lent were up.
+	 *
+	 * @return bool True if the current user is a collaborator.
+	 */
+	private function is_collaborator(): bool {
+		return Collaboration_Request::get_for_user( get_current_user_id() ) instanceof Collaboration_Request;
+	}
+
+	/**
 	 * Checks whether the current user owns, or may administer, a given collaboration request.
 	 *
 	 * @param string $token The collaboration request token.
@@ -304,6 +319,10 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 
 		if ( $user_id > 0 && $user_id === $collaboration_request->get_author_id() ) {
 			return true;
+		}
+
+		if ( $this->is_collaborator() ) {
+			return $this->not_found_error();
 		}
 
 		/*

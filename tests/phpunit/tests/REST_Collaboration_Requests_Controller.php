@@ -584,4 +584,77 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 		$this->assertContains( $theirs, $ids );
 		$this->assertContains( $somebody_elses, $ids );
 	}
+
+	/**
+	 * The link is a way into one post, not a way to hand out more of them.
+	 *
+	 * Being able to edit the post is what decides who may share it, and a
+	 * collaborator can edit the post — so without an explicit refusal the
+	 * invitation could be used to mint fresh ones indefinitely.
+	 *
+	 * @covers ::create_item_permissions_check
+	 */
+	public function test_a_collaborator_cannot_share_the_post_on(): void {
+		$created = $this->create_request();
+		$request = Collaboration_Request::get_by_token( (string) $created['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$this->assertTrue(
+			current_user_can( 'edit_post', self::$post_id ),
+			'They can edit the post, which is exactly why this needs refusing.'
+		);
+
+		$attempt = new WP_REST_Request( 'POST', self::ROUTE );
+		$attempt->set_param( 'post', self::$post_id );
+
+		$this->assertSame( 403, rest_get_server()->dispatch( $attempt )->get_status() );
+	}
+
+	/**
+	 * @covers ::check_owner_permission
+	 */
+	public function test_a_collaborator_cannot_change_their_own_link(): void {
+		$created = $this->create_request( [ 'edit' ] );
+		$token   = (string) $created['token'];
+		$request = Collaboration_Request::get_by_token( $token );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$update = new WP_REST_Request( 'PUT', self::ROUTE . '/' . $token );
+		$update->set_param( 'capabilities', [ 'edit', 'upload' ] );
+
+		$this->assertSame( 404, rest_get_server()->dispatch( $update )->get_status() );
+
+		$this->assertSame(
+			[ 'edit' ],
+			$request->get_capabilities(),
+			'What they were lent is unchanged.'
+		);
+	}
+
+	/**
+	 * @covers ::check_owner_permission
+	 */
+	public function test_a_collaborator_cannot_revoke_their_own_link(): void {
+		$created = $this->create_request();
+		$token   = (string) $created['token'];
+		$request = Collaboration_Request::get_by_token( $token );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$delete = new WP_REST_Request( 'DELETE', self::ROUTE . '/' . $token );
+
+		$this->assertSame( 404, rest_get_server()->dispatch( $delete )->get_status() );
+		$this->assertInstanceOf(
+			Collaboration_Request::class,
+			Collaboration_Request::get_by_token( $token )
+		);
+	}
 }

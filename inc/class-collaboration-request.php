@@ -486,9 +486,9 @@ final class Collaboration_Request {
 			$claimed_by = $this->get_user_id();
 
 			if ( $claimed_by > 0 && $claimed_by !== $user_id && get_userdata( $claimed_by ) instanceof WP_User ) {
-				require_once ABSPATH . 'wp-admin/includes/user.php';
-
-				wp_delete_user( $user_id );
+				// Nothing to reassign: this account lost the race before it was
+				// ever signed in to, so it cannot have written anything.
+				self::delete_user( $user_id );
 
 				return $claimed_by;
 			}
@@ -573,6 +573,33 @@ final class Collaboration_Request {
 	}
 
 	/**
+	 * Deletes one of the temporary accounts this plugin makes.
+	 *
+	 * Both calls are needed on a network, in this order. wp_delete_user() is the
+	 * only one of the two that reassigns, and on multisite it does not delete
+	 * the account at all — it detaches it from this site and leaves the network
+	 * user behind. wpmu_delete_user() is what finally removes it, and reaching
+	 * for it alone would delete every post the account authored, which includes
+	 * the collaborator's revisions of the shared post: the very history the
+	 * reassignment is trying to keep.
+	 *
+	 * @param int      $user_id  Account to delete.
+	 * @param int|null $reassign Optional. User to give anything it wrote to.
+	 * @return void
+	 */
+	private static function delete_user( int $user_id, ?int $reassign = null ): void {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+
+		wp_delete_user( $user_id, $reassign );
+
+		if ( is_multisite() ) {
+			require_once ABSPATH . 'wp-admin/includes/ms.php';
+
+			wpmu_delete_user( $user_id );
+		}
+	}
+
+	/**
 	 * Permanently deletes this collaboration request, and the account it created.
 	 *
 	 * Anything the collaborator wrote stays where it is — by this point it
@@ -593,28 +620,11 @@ final class Collaboration_Request {
 		$user_id = $this->get_user_id();
 
 		if ( $user_id > 0 ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-
 			// Null, not 0: wp_delete_user() reads 0 as "reassign to user 0" and
 			// only treats null as "there is nobody to reassign to".
 			$author_id = $this->get_author_id();
-			$reassign  = $author_id > 0 ? $author_id : null;
 
-			/*
-			 * wp_delete_user() either way, and first: it is the only one of the
-			 * two that reassigns, and on multisite it detaches the account from
-			 * this site rather than deleting it. Reaching for wpmu_delete_user()
-			 * alone would delete every post the account authored — which
-			 * includes the collaborator's revisions of the shared post, the very
-			 * history this is trying to keep.
-			 */
-			wp_delete_user( $user_id, $reassign );
-
-			if ( is_multisite() ) {
-				require_once ABSPATH . 'wp-admin/includes/ms.php';
-
-				wpmu_delete_user( $user_id );
-			}
+			self::delete_user( $user_id, $author_id > 0 ? $author_id : null );
 		}
 
 		wp_delete_post( $this->post->ID, true );

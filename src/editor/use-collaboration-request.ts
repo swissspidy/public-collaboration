@@ -108,6 +108,10 @@ export function useCollaborationRequest() {
 	/** Whatever capability update is currently in flight. */
 	const pendingRef = useRef< Promise< unknown > >( Promise.resolve() );
 
+	// Which toggle is the current one. A queued update that something newer has
+	// already superseded must not put back what that newer one changed.
+	const toggleRef = useRef( 0 );
+
 	/**
 	 * Asks the server to revoke a link, reporting whether it is now gone.
 	 *
@@ -218,6 +222,8 @@ export function useCollaborationRequest() {
 			setCapabilities( next );
 			capabilitiesRef.current = next;
 
+			const toggle = ++toggleRef.current;
+
 			pendingRef.current = pendingRef.current
 				.catch( () => {} )
 				.then( async () => {
@@ -234,6 +240,18 @@ export function useCollaborationRequest() {
 							} )
 						);
 					} catch ( error ) {
+						/*
+						 * Somebody has ticked something else since. Every update
+						 * sends the whole list, so the one behind this in the
+						 * queue will put the server right — undoing the boxes
+						 * back to what they were before this update would throw
+						 * away a choice made after it, and leave what is on
+						 * screen disagreeing with what the server was told.
+						 */
+						if ( toggle !== toggleRef.current ) {
+							return;
+						}
+
 						setCapabilities( previous );
 						capabilitiesRef.current = previous;
 
