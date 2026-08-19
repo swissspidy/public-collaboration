@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<ruleset name="WordPress Coding Standards for Public Collaboration">
+	<description>A custom set of code standard rules for Public Collaboration.</description>
+
+	<rule ref="WordPress-Core">
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax" />
+	</rule>
+
+	<rule ref="WordPress-Docs">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" value="public-collaboration" />
+		</properties>
+	</rule>
+
+	<!-- Make sure we prefix everything in the global namespace. -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="pubcol"/>
+				<element value="PublicCollaboration"/>
+				<element value="public_collaboration"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>tests/*</exclude-pattern>
+	</rule>
+
+	<!--
+		Prefixing protects the global namespace of the plugin people install.
+		Tests are export-ignored and never ship, and they legitimately reach for
+		core's own globals — `$wp_rest_server` above all — to stand a REST server
+		up per test.
+	-->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<exclude-pattern>tests/*</exclude-pattern>
+	</rule>
+
+	<!--
+		Every file that declares something also carries the mandatory
+		`if ( ! defined( 'ABSPATH' ) ) { exit; }` guard, which PSR1 counts as a
+		side effect. The guard is expected of plugins in the directory, so the
+		rule loses to the platform convention. The rest of PSR1 still applies.
+	-->
+	<rule ref="PSR1.Files.SideEffects">
+		<exclude name="PSR1.Files.SideEffects.FoundWithSymbols"/>
+	</rule>
+
+	<!-- We only support the latest major WordPress release. -->
+	<config name="minimum_wp_version" value="7.1" />
+	<rule ref="WordPress.WP.DeprecatedFunctions" />
+
+	<!--
+		Listed one by one rather than as a bare `.`, which was quietly scanning
+		the plugin's own PHP and nothing else.
+	-->
+	<arg name="extensions" value="php"/>
+	<arg value="sp"/>
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="parallel" value="8"/>
+	<file>public-collaboration.php</file>
+	<file>uninstall.php</file>
+	<file>inc</file>
+	<file>templates</file>
+	<file>tests</file>
+
+	<!-- Test for PHP 8.0+ compatibility. -->
+	<rule ref="PHPCompatibilityWP" />
+	<config name="testVersion" value="8.0-"/>
+
+	<exclude-pattern>*/build/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<!-- Bootstraps set up globals for a test runner; the usual rules do not apply. -->
+	<exclude-pattern>*/bootstrap.php</exclude-pattern>
+</ruleset>

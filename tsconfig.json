@@ -1,0 +1,28 @@
+{
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"lib": [
+			"dom",
+			"dom.iterable",
+			"esnext"
+		],
+		"strict": true,
+		"noEmit": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"types": [
+			"node"
+		]
+	},
+	"include": [
+		"src/**/*",
+		"tests/e2e/**/*"
+	]
+}

@@ -1,0 +1,56 @@
+.public-collaboration-modal {
+	max-width: 26rem;
+}
+
+.public-collaboration-modal p {
+	margin: 0 0 1em;
+}
+
+.public-collaboration-modal__qrcode {
+	margin: 0 0 1.5em;
+	text-align: center;
+}
+
+.public-collaboration-modal__qrcode svg {
+	width: 11rem;
+	height: 11rem;
+
+	/*
+	 * The code has to stay light-on-dark-free to remain scannable, so it keeps
+	 * its own background regardless of the editor's colour scheme.
+	 */
+	background: #fff;
+	border-radius: 4px;
+}
+
+.public-collaboration-modal__link {
+	display: flex;
+	gap: 0.5em;
+	align-items: flex-start;
+	margin: 0 0 1.5em;
+}
+
+.public-collaboration-modal__link .components-base-control {
+	flex-grow: 1;
+	min-width: 0;
+}
+
+.public-collaboration-modal__capabilities {
+	margin: 0 0 1.5em;
+	padding: 0;
+	border: 0;
+}
+
+.public-collaboration-modal__capabilities legend {
+	margin: 0 0 0.5em;
+	padding: 0;
+}
+
+.public-collaboration-modal__status {
+	margin: 0 0 1.5em;
+}
+
+.public-collaboration-modal__actions {
+	display: flex;
+	justify-content: flex-end;
+}

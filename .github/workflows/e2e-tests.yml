@@ -1,0 +1,67 @@
+name: E2E Tests
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+
+# Cancels all previous workflow runs for the same branch that have not yet completed.
+concurrency:
+    # The concurrency group contains the workflow name and the branch name.
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    e2e-tests:
+        name: E2E Tests
+        runs-on: ubuntu-latest
+        # Bringing up WordPress and running the suite takes a few minutes; well
+        # past that and something has hung rather than gone slowly.
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version-file: '.nvmrc'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            # No --with-deps. Every library Chromium needs is already on the
+            # runner image at the newest version — all that flag added was a
+            # handful of optional CJK and emoji font packages, fetched over an
+            # Ubuntu mirror that has taken upwards of seven minutes for a single
+            # 3.5 MB file and timed this job out. Nothing here renders CJK text
+            # or compares screenshots, so the fonts buy nothing. The timeout
+            # stays as a canary: without apt in the way this takes seconds.
+            - name: Install Playwright browsers
+              timeout-minutes: 5
+              run: npx playwright install chromium
+
+            - name: Build plugin
+              run: npm run build
+
+            # Brings up the WordPress release this plugin targets, with the
+            # Gutenberg plugin it depends on — see .wp-env.json. WordPress
+            # refuses to activate the plugin without it.
+            - name: Start WordPress
+              run: npm run wp-env start
+
+            - name: Run tests
+              run: npm run test:e2e
+
+            - name: Archive debug artifacts (screenshots, HTML snapshots)
+              uses: actions/upload-artifact@v7
+              if: always()
+              with:
+                  name: failures-artifacts
+                  path: artifacts
+                  if-no-files-found: ignore

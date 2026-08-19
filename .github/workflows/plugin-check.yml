@@ -1,0 +1,89 @@
+name: Plugin Check
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+
+# Cancels all previous workflow runs for the same branch that have not yet completed.
+concurrency:
+    # The concurrency group contains the workflow name and the branch name.
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    plugin-check:
+        name: Plugin Check
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version-file: '.nvmrc'
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build plugin
+              run: npm run build
+
+            # Not wp-cli:nightly: see the comment on the same step in
+            # nightly-build.yml — its nightly phar isn't hosted as a GitHub
+            # Releases asset, so setup-php can't fetch it.
+            #
+            # github-token: '' — see the comment on the same step in
+            # nightly-build.yml: setup-php writes this into Composer's
+            # global, job-wide auth.json while installing wp-cli, and the
+            # step below needs that file to *not* contain a token.
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: latest
+                  coverage: none
+                  tools: wp-cli
+                  github-token: ''
+
+            # `wp package install` hands the job to Composer, which registers
+            # the package as a VCS repository and clones it. Unauthenticated
+            # against the GitHub API (see github-token above), Composer reaches
+            # for the SSH remote, and the runner has no key — so the clone dies
+            # on "Permission denied (publickey)". Rewriting the remote at the
+            # git level fixes it wherever Composer's own config happens to
+            # live, which for `wp package install` is not the global one.
+            - name: Clone GitHub over HTTPS
+              run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+            # Pinned to 3.1.0, not :@stable: see the comment on the same
+            # step in nightly-build.yml — 3.2.0+ requires a wp-cli/wp-cli
+            # version that has never actually been released.
+            - name: Install compatible version of dist-archive-command
+              run: wp package install wp-cli/dist-archive-command:3.1.0
+
+            # Plugin Check should see exactly what a directory submission
+            # would ship — not the dev sources (src, tests, vendor's dev-only
+            # tooling) that only exist in this repo. `wp dist-archive` builds
+            # that from .distignore, same as the nightly build does.
+            - name: Build distributable copy
+              run: |
+                  wp dist-archive . ./public-collaboration.zip
+                  mkdir dist
+                  unzip public-collaboration.zip -d dist
+
+            # wp-version: the action installs the latest *stable* release by
+            # default, and this plugin requires a version that has not had one
+            # yet — so WordPress refuses to activate it and the check never
+            # runs. trunk is always at or ahead of the version we require.
+            - name: Run Plugin Check
+              uses: wordpress/plugin-check-action@v1
+              with:
+                  build-dir: './dist/public-collaboration'
+                  wp-version: trunk
