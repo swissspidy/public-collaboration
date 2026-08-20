@@ -109,10 +109,21 @@ export function LinkList( {
 								className="public-collaboration-links__revoke"
 								size="small"
 								icon={ closeSmall }
-								label={ __(
-									'Revoke link',
-									'public-collaboration'
-								) }
+								label={
+									request.joined && request.collaborator
+										? sprintf(
+												/* translators: %s: Display name of the collaborator. */
+												__(
+													'Revoke the link %s is using',
+													'public-collaboration'
+												),
+												request.collaborator
+										  )
+										: __(
+												'Revoke link',
+												'public-collaboration'
+										  )
+								}
 								onClick={ () => onRevoke( request.token ) }
 								isBusy={ isRevoking }
 								disabled={ isRevoking }
