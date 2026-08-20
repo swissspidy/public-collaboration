@@ -4,14 +4,19 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { Locator, Page } from '@playwright/test';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { addCoverageReport } from 'monocart-reporter';
 import type { V8CoverageEntry } from 'monocart-coverage-reports';
 
 /**
  * WordPress dependencies
  */
-import { Editor, test as base } from '@wordpress/e2e-test-utils-playwright';
+import {
+	Admin,
+	Editor,
+	PageUtils,
+	test as base,
+} from '@wordpress/e2e-test-utils-playwright';
 import type { RequestUtils } from '@wordpress/e2e-test-utils-playwright';
 
 /**
@@ -188,7 +193,26 @@ class Collaboration {
 	}
 }
 
+/** A browser signed in as an account of its own, and the tools to drive it. */
+type RoleSession = {
+	/** ID of the account, for making it something to share. */
+	userId: number;
+	page: Page;
+	admin: Admin;
+	editor: Editor;
+	collaboration: Collaboration;
+};
+
 type E2EFixture = {
+	/**
+	 * Signs in as a fresh account with a given role, in a browser of its own.
+	 *
+	 * A role is only interesting here for what it can and cannot lend, and the
+	 * suite's own session is an administrator — so the account is made for the
+	 * test, signed in through the login form like anybody else, and deleted
+	 * afterwards.
+	 */
+	asRole: ( role: string ) => Promise< RoleSession >;
 	/** Helpers for the sharing side of the feature. */
 	collaboration: Collaboration;
 	/**
@@ -196,8 +220,12 @@ type E2EFixture = {
 	 *
 	 * Not requestUtils.createPost(): its payload type insists on `date_gmt`,
 	 * which the REST API is perfectly happy to work out for itself.
+	 *
+	 * @param title  Post title.
+	 * @param author Optional. Whose post it is. Defaults to the administrator
+	 *               the suite itself is signed in as.
 	 */
-	createDraft: ( title: string ) => Promise< number >;
+	createDraft: ( title: string, author?: number ) => Promise< number >;
 	/**
 	 * A second, independent browser context and page — standing in for the
 	 * person the link was sent to. Logged out, same as they would be.
@@ -236,16 +264,120 @@ export const test = base.extend< E2EFixture, {} >( {
 		await use( new Collaboration( { page, editor } ) );
 	},
 
+	asRole: async ( { browser, browserName, baseURL, requestUtils }, use ) => {
+		const contexts: BrowserContext[] = [];
+		const pages: Page[] = [];
+		const created: number[] = [];
+
+		const asRole = async ( role: string ): Promise< RoleSession > => {
+			/*
+			 * Unique per account rather than per run: two of these can be alive
+			 * at once, and a login is only ever as good as its own name. Letters
+			 * and digits only, with no underscore in sight — a network holds
+			 * signups to that and refuses anything else outright.
+			 */
+			const username = `pubcol${ role }${
+				created.length
+			}${ Date.now() }`;
+			const password = 'a password nobody has to remember';
+
+			const user = await ( requestUtils as RequestUtils ).createUser( {
+				username,
+				email: `${ username }@public-collaboration.invalid`,
+				password,
+				roles: [ role ],
+			} );
+
+			created.push( user.id );
+
+			/*
+			 * `storageState` in the shared Playwright config points at the
+			 * administrator's saved session, and a context made here picks it
+			 * up. An empty one is what makes this somebody else's browser.
+			 */
+			const context = await browser.newContext( {
+				baseURL,
+				storageState: { cookies: [], origins: [] },
+			} );
+
+			contexts.push( context );
+
+			const page = await context.newPage();
+			const measured = collectsCoverage( browserName );
+
+			if ( measured ) {
+				await startCoverage( page );
+				pages.push( page );
+			}
+
+			await page.goto( '/wp-login.php' );
+			await page.locator( '#user_login' ).fill( username );
+			await page.locator( '#user_pass' ).fill( password );
+			await page.locator( '#wp-submit' ).click();
+			await page.waitForURL( /wp-admin/ );
+
+			const editor = new Editor( { page } );
+
+			return {
+				userId: user.id,
+				page,
+				editor,
+				admin: new Admin( {
+					page,
+					pageUtils: new PageUtils( { page, browserName } ),
+					editor,
+				} ),
+				collaboration: new Collaboration( { page, editor } ),
+			};
+		};
+
+		// eslint-disable-next-line react-hooks/rules-of-hooks
+		await use( asRole );
+
+		// Coverage first: it has to be asked for while the page is still open.
+		for ( const page of pages ) {
+			await stopCoverage( page );
+		}
+
+		for ( const context of contexts ) {
+			await context.close();
+		}
+
+		for ( const id of created ) {
+			try {
+				// Anything they authored goes back to the site's first account,
+				// so that deleting the borrowed role does not take the posts
+				// with it.
+				await ( requestUtils as RequestUtils ).rest( {
+					method: 'DELETE',
+					path: `/wp/v2/users/${ id }`,
+					params: { force: true, reassign: 1 },
+				} );
+			} catch {
+				// Core refuses to delete a user over REST on a network at all,
+				// and these accounts outlive nothing but the container they
+				// were made in.
+			}
+		}
+	},
+
 	createDraft: async ( { requestUtils }, use ) => {
 		const created: number[] = [];
 
-		const createDraft = async ( title: string ): Promise< number > => {
+		const createDraft = async (
+			title: string,
+			author?: number
+		): Promise< number > => {
 			const post = await ( requestUtils as RequestUtils ).rest< {
 				id: number;
 			} >( {
 				method: 'POST',
 				path: '/wp/v2/posts',
-				data: { title, status: 'draft' },
+				data: {
+					title,
+					status: 'draft',
+					...( author ? { author } : {} ),
+				},
 			} );
 
 			created.push( post.id );
@@ -267,7 +399,7 @@ export const test = base.extend< E2EFixture, {} >( {
 		}
 	},
 
-	secondPage: async ( { browser, browserName }, use ) => {
+	secondPage: async ( { browser, browserName, baseURL }, use ) => {
 		/*
 		 * `storageState` in the shared Playwright config points at the
 		 * administrator's saved session, and a context made here picks it up.
@@ -277,6 +409,9 @@ export const test = base.extend< E2EFixture, {} >( {
 		 * shared it, and sends them to the post with no invitation at all.
 		 */
 		const context = await browser.newContext( {
+			// So that a test can ask this browser for an admin screen by path,
+			// the same way it would ask the sharer's.
+			baseURL,
 			storageState: { cookies: [], origins: [] },
 		} );
 		const secondPage = await context.newPage();
