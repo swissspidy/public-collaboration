@@ -201,10 +201,30 @@ function get_collaborator_data( Collaboration_Request $request ): array {
 }
 
 /**
+ * Whether a user is in the editor on a collaboration link of their own.
+ *
+ * The one question that decides who may manage a post's links, asked in one
+ * place so that the answer cannot drift between the callers. Being able to edit
+ * the post is what qualifies somebody to share it, and a collaborator can edit
+ * the post — that is the whole point of the link they followed. Without this
+ * they could use the invitation they were given to mint more, and revoke the
+ * one that let them in.
+ *
+ * @param int $user_id User ID.
+ * @return bool Whether the user is a collaborator.
+ */
+function is_collaborator( int $user_id ): bool {
+	return Collaboration_Request::get_for_user( $user_id ) instanceof Collaboration_Request;
+}
+
+/**
  * Returns what the sharing panel needs to know about the links it hands out.
  *
  * How long a link lasts is filterable, so the panel is told what it is rather
- * than left repeating the default back to somebody who has changed it.
+ * than left repeating the default back to somebody who has changed it. What may
+ * be handed out is told for the same reason: the server refuses to lend an
+ * upload to somebody who cannot upload themselves, and a switch that can only
+ * ever come back as an error is not a choice.
  *
  * @return array Sharing settings.
  *
@@ -212,7 +232,8 @@ function get_collaborator_data( Collaboration_Request $request ): array {
  */
 function get_sharing_settings(): array {
 	return [
-		'ttl' => Collaboration_Request::get_ttl(),
+		'ttl'       => Collaboration_Request::get_ttl(),
+		'canUpload' => current_user_can( 'upload_files' ),
 	];
 }
 

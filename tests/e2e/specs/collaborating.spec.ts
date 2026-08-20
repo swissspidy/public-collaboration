@@ -126,6 +126,45 @@ test.describe( 'Following a collaboration link', () => {
 		await expect( welcome ).not.toContainText( 'upload images' );
 	} );
 
+	test( 'does not let them hand the post on to anybody else', async ( {
+		admin,
+		secondPage,
+		secondEditor,
+		collaboration,
+		createDraft,
+	} ) => {
+		await admin.editPost( await createDraft( 'Not theirs to share on' ) );
+
+		const url = await collaboration.shareLink();
+
+		await secondPage.goto( url );
+
+		const welcome = secondPage.getByRole( 'dialog', {
+			name: 'You have been invited to help',
+		} );
+
+		await expect( welcome ).toBeVisible( { timeout: 60_000 } );
+
+		await welcome.getByRole( 'button', { name: 'Start editing' } ).click();
+		await expect( welcome ).toBeHidden();
+
+		await secondEditor.openDocumentSettingsSidebar();
+
+		/*
+		 * Being able to edit the post is what qualifies somebody to share it,
+		 * and a collaborator can edit the post — so the panel that mints links
+		 * is not merely disabled for them, it is never sent. Asserting on it
+		 * from an open sidebar rather than a closed one, where nothing at all
+		 * would be there to find.
+		 */
+		await expect(
+			secondPage.getByRole( 'region', { name: 'Editor settings' } )
+		).toBeVisible();
+		await expect(
+			secondPage.getByRole( 'button', { name: 'Public collaboration' } )
+		).toHaveCount( 0 );
+	} );
+
 	test( 'sends whoever shared it straight to their own post', async ( {
 		admin,
 		page,

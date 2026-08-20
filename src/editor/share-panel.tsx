@@ -15,10 +15,8 @@ import { __, sprintf } from '@wordpress/i18n';
 import { getDuration } from '../expiry';
 import { CollaborationModal } from './modal';
 import { LinkList } from './link-list';
+import { getSettings } from './settings';
 import { useCollaborationRequests } from './use-collaboration-requests';
-
-/** How long a link lasts, for a page that somehow did not say. */
-const DEFAULT_TTL = 15 * 60;
 
 /**
  * The control that mints collaboration links, and everything they lead to.
@@ -26,7 +24,7 @@ const DEFAULT_TTL = 15 * 60;
 export function SharePanel() {
 	// Read rather than assumed: how long a link lasts is filterable, and the
 	// page is printed with whatever that filter had to say.
-	const ttl = window.publicCollaborationSettings?.ttl ?? DEFAULT_TTL;
+	const { ttl } = getSettings();
 
 	const { baseControlProps, controlProps } = useBaseControlProps( {
 		__nextHasNoMarginBottom: true,
@@ -47,6 +45,7 @@ export function SharePanel() {
 		isCreating,
 		revoking,
 		canShare,
+		grantable,
 		create,
 		revoke,
 		show,
@@ -97,6 +96,7 @@ export function SharePanel() {
 			{ openRequest && (
 				<CollaborationModal
 					request={ openRequest }
+					grantable={ grantable }
 					isNew={ isNewLink }
 					isRevoking={ revoking.includes( openRequest.token ) }
 					onToggleCapability={ ( capability, enabled ) =>

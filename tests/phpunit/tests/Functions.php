@@ -19,6 +19,8 @@ use function PublicCollaboration\filter_cron_schedules;
 use function PublicCollaboration\filter_rest_pre_insert;
 use function PublicCollaboration\get_collaborator_data;
 use function PublicCollaboration\get_editor_url;
+use function PublicCollaboration\get_sharing_settings;
+use function PublicCollaboration\is_collaborator;
 use function PublicCollaboration\filter_post_lock_meta;
 use function PublicCollaboration\filter_show_post_locked_dialog;
 use function PublicCollaboration\restrict_admin_access;
@@ -548,6 +550,35 @@ class Test_Functions extends WP_UnitTestCase {
 			$printed,
 			'The dialog renders from this and nothing else.'
 		);
+	}
+
+	/**
+	 * The one question that decides who may manage a post's links.
+	 *
+	 * @covers \PublicCollaboration\is_collaborator
+	 */
+	public function test_is_collaborator(): void {
+		[ , $user_id ] = $this->create_collaborator( [ 'edit' ] );
+
+		$this->assertTrue( is_collaborator( $user_id ) );
+		$this->assertFalse( is_collaborator( self::$admin_id ) );
+		$this->assertFalse( is_collaborator( 0 ) );
+	}
+
+	/**
+	 * Sharing is not a way to give away more than you have, so the panel is not
+	 * handed a switch that could only ever come back as an error.
+	 *
+	 * @covers \PublicCollaboration\get_sharing_settings
+	 */
+	public function test_sharing_settings_leave_out_uploads_the_sharer_cannot_make(): void {
+		wp_set_current_user( self::$admin_id );
+
+		$this->assertTrue( get_sharing_settings()['canUpload'] );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$this->assertFalse( get_sharing_settings()['canUpload'] );
 	}
 
 	/**

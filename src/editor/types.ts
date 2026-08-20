@@ -22,6 +22,8 @@ export interface CollaborationRequest {
 export interface SharingSettings {
 	/** How long a collaboration link stays valid, in seconds. */
 	ttl: number;
+	/** Whether the person sharing may upload media themselves. */
+	canUpload: boolean;
 }
 
 declare global {

@@ -419,16 +419,10 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	/**
 	 * Whether the current user is here on a collaboration link themselves.
 	 *
-	 * Being able to edit the post is what decides who may manage its links, and
-	 * a collaborator can edit the post — that is the whole point of the link
-	 * they followed. Without this they could use the invitation they were given
-	 * to mint more, and go on doing so long after the fifteen minutes they were
-	 * lent were up.
-	 *
 	 * @return bool True if the current user is a collaborator.
 	 */
 	private function is_collaborator(): bool {
-		return Collaboration_Request::get_for_user( get_current_user_id() ) instanceof Collaboration_Request;
+		return is_collaborator( get_current_user_id() );
 	}
 
 	/**
