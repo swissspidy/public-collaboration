@@ -250,9 +250,13 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	/**
 	 * @covers ::get_for_post
 	 */
-	public function test_get_for_post_has_nothing_for_a_post_that_cannot_exist(): void {
+	public function test_get_for_post_has_nothing_for_a_post_that_does_not_exist(): void {
 		$this->assertSame( [], Collaboration_Request::get_for_post( 0 ) );
 		$this->assertSame( [], Collaboration_Request::get_for_post( -1 ) );
+
+		// An ID of the right shape for a post, belonging to none: the guard at
+		// the top says nothing about this one, so it is the query answering.
+		$this->assertSame( [], Collaboration_Request::get_for_post( 999999 ) );
 	}
 
 	/**
