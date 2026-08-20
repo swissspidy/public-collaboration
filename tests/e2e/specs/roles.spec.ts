@@ -102,23 +102,41 @@ test.describe( 'Sharing from each role', () => {
 			/*
 			 * The ceiling, and the reason this runs for every role rather than
 			 * once: an administrator's invitation is not an administrator's
-			 * account. Another post, and any screen in wp-admin that is not this
-			 * post's editor, sends them back where they were invited.
+			 * account.
+			 *
+			 * The post list is the sharp end of it. A collaborator holds
+			 * `edit_posts` — the editor will not render without it — so this is
+			 * a screen WordPress would hand them, and this plugin is the only
+			 * thing that sends them back.
 			 */
 			const backToThePost = new RegExp(
 				`post\\.php\\?post=${ postId }&action=edit`
 			);
 
-			await secondPage.goto(
-				`/wp-admin/post.php?post=${ otherPostId }&action=edit`
-			);
-			await expect( secondPage ).toHaveURL( backToThePost );
+			for ( const screen of [
+				`post.php?post=${ otherPostId }&action=edit`,
+				'edit.php',
+			] ) {
+				await secondPage.goto( `/wp-admin/${ screen }` );
 
-			await secondPage.goto( '/wp-admin/plugins.php' );
-			await expect( secondPage ).toHaveURL( backToThePost );
+				await expect( secondPage ).toHaveURL( backToThePost );
+			}
 
-			await secondPage.goto( '/wp-admin/users.php' );
-			await expect( secondPage ).toHaveURL( backToThePost );
+			/*
+			 * The screens WordPress refuses on its own account never reach this
+			 * plugin at all: with no menu entry to their name,
+			 * user_can_access_admin_page() turns them away before `admin_init`
+			 * fires, so there is no redirect of ours left to assert. Which of
+			 * the two answers is core's business; that neither hands over the
+			 * screen is the part that matters here.
+			 */
+			for ( const screen of [ 'plugins.php', 'users.php' ] ) {
+				await secondPage.goto( `/wp-admin/${ screen }` );
+
+				await expect(
+					secondPage.locator( '.wp-list-table' )
+				).toHaveCount( 0 );
+			}
 		} );
 	}
 } );
