@@ -1,5 +1,5 @@
 {
-	"core": "https://wordpress.org/wordpress-7.1-RC4.zip",
+	"core": null,
 	"plugins": [
 		"https://downloads.wordpress.org/plugin/gutenberg.zip",
 		"."
