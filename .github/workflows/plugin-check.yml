@@ -78,12 +78,14 @@ jobs:
                   mkdir dist
                   unzip public-collaboration.zip -d dist
 
-            # wp-version: the action installs the latest *stable* release by
-            # default, and this plugin requires a version that has not had one
-            # yet — so WordPress refuses to activate it and the check never
-            # runs. trunk is always at or ahead of the version we require.
+            # The release this plugin targets, same as .wp-env.json pins for
+            # everything else. It was trunk while 7.1 was still a release
+            # candidate: the action installs the latest stable by default,
+            # there had not been one at or above what this plugin requires, and
+            # WordPress refuses to activate a plugin whose requirements the
+            # install does not meet.
             - name: Run Plugin Check
               uses: wordpress/plugin-check-action@v1
               with:
                   build-dir: './dist/public-collaboration'
-                  wp-version: trunk
+                  wp-version: '7.1'
