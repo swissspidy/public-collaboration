@@ -363,7 +363,11 @@ final class Collaboration_Request {
 	 * @return int Unix timestamp.
 	 */
 	public function get_expires_at(): int {
-		return (int) get_post_meta( $this->post->ID, self::META_EXPIRES_AT, true );
+		$expires_at = get_post_meta( $this->post->ID, self::META_EXPIRES_AT, true );
+
+		// A missing or unreadable expiry is treated as having passed: this is the
+		// one value that decides whether a token still works.
+		return is_numeric( $expires_at ) ? (int) $expires_at : 0;
 	}
 
 	/**
@@ -388,7 +392,7 @@ final class Collaboration_Request {
 		}
 
 		return array_values(
-			array_intersect( array_map( 'strval', $capabilities ), self::get_available_capabilities() )
+			array_intersect( array_filter( $capabilities, 'is_string' ), self::get_available_capabilities() )
 		);
 	}
 
@@ -405,7 +409,7 @@ final class Collaboration_Request {
 		update_post_meta(
 			$this->post->ID,
 			self::META_CAPABILITIES,
-			array_values( array_intersect( array_map( 'strval', $capabilities ), self::get_available_capabilities() ) )
+			array_values( array_intersect( $capabilities, self::get_available_capabilities() ) )
 		);
 	}
 
@@ -425,7 +429,9 @@ final class Collaboration_Request {
 	 * @return int User ID, or 0 if no user has been created yet.
 	 */
 	public function get_user_id(): int {
-		return (int) get_post_meta( $this->post->ID, self::META_USER_ID, true );
+		$user_id = get_post_meta( $this->post->ID, self::META_USER_ID, true );
+
+		return is_numeric( $user_id ) ? (int) $user_id : 0;
 	}
 
 	/**

@@ -239,7 +239,9 @@ function filter_template_include( string $template ): string {
 	 * otherwise counting upwards from 1 would find every live collaboration
 	 * request.
 	 */
-	if ( ! $post instanceof WP_Post || (string) get_query_var( 'name' ) !== $post->post_name ) {
+	$name = get_query_var( 'name' );
+
+	if ( ! $post instanceof WP_Post || ! is_string( $name ) || $name !== $post->post_name ) {
 		global $wp_query;
 
 		if ( $wp_query instanceof WP_Query ) {
