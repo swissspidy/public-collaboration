@@ -29,5 +29,7 @@ add_filter( 'show_post_locked_dialog', __NAMESPACE__ . '\filter_show_post_locked
 add_filter( 'update_post_metadata', __NAMESPACE__ . '\filter_post_lock_meta', 10, 3 );
 add_action( 'admin_init', __NAMESPACE__ . '\unhook_post_lock_heartbeat' );
 
+add_filter( 'rest_pre_dispatch', __NAMESPACE__ . '\filter_sync_rooms', 10, 3 );
+
 add_filter( 'cron_schedules', __NAMESPACE__ . '\filter_cron_schedules' ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
 add_action( 'public_collaboration_cleanup', __NAMESPACE__ . '\delete_expired_requests' );

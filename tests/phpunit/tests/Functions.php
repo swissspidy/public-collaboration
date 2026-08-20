@@ -23,6 +23,7 @@ use function PublicCollaboration\get_sharing_settings;
 use function PublicCollaboration\is_collaborator;
 use function PublicCollaboration\filter_post_lock_meta;
 use function PublicCollaboration\filter_show_post_locked_dialog;
+use function PublicCollaboration\filter_sync_rooms;
 use function PublicCollaboration\restrict_admin_access;
 use function PublicCollaboration\unhook_post_lock_heartbeat;
 
@@ -607,6 +608,164 @@ class Test_Functions extends WP_UnitTestCase {
 			'"ttl":300',
 			$printed,
 			'How long a link lasts is filterable, so the panel is told rather than left to repeat the default.'
+		);
+	}
+
+	/**
+	 * Asks the guard what it would do with a room, as the given user.
+	 *
+	 * @param string   $route   Sync route being requested.
+	 * @param array    $params  Parameters carrying the rooms.
+	 * @param int      $user_id Who is asking.
+	 * @return mixed Whatever the filter would hand back to the REST server.
+	 *
+	 * @phpstan-param array<string, mixed> $params
+	 */
+	private function ask_for_room( string $route, array $params, int $user_id ) {
+		wp_set_current_user( $user_id );
+
+		$request = new WP_REST_Request( 'POST', $route );
+
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		return filter_sync_rooms( null, rest_get_server(), $request );
+	}
+
+	/**
+	 * The room for the shared post is the whole point, and has to work.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_may_join_the_room_for_their_own_post(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/save',
+				[ 'room' => 'postType/post:' . self::$post_id ],
+				$user_id
+			)
+		);
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/updates',
+				[
+					'rooms' => [
+						[
+							'client_id' => 'abc',
+							'room'      => 'postType/post:' . self::$post_id,
+						],
+					],
+				],
+				$user_id
+			)
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_join_another_posts_room(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$result = $this->ask_for_room(
+			'/wp-sync/v1/save',
+			[ 'room' => 'postType/post:' . $other_id ],
+			$user_id
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'public_collaboration_forbidden_room', $result->get_error_code() );
+	}
+
+	/**
+	 * The gap this guard exists for: a room naming no object is checked against
+	 * bare `edit_posts`, which every collaborator holds for the editor's sake.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_join_a_room_that_names_no_post(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/save', [ 'room' => 'postType/post' ], $user_id )
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_slip_a_room_in_beside_their_own(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$this->assertWPError(
+			$this->ask_for_room(
+				'/wp-sync/v1/updates',
+				[
+					'rooms' => [
+						[
+							'client_id' => 'abc',
+							'room'      => 'postType/post:' . self::$post_id,
+						],
+						[
+							'client_id' => 'def',
+							'room'      => 'postType/post:' . $other_id,
+						],
+					],
+				],
+				$user_id
+			),
+			'One room of their own does not carry the rest of the request.'
+		);
+	}
+
+	/**
+	 * A request with nothing to check is not a request to wave through.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_ask_for_a_room_this_does_not_recognise(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/updates', [ 'rooms' => [ 'postType/post' ] ], $user_id )
+		);
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/updates', [ 'rooms' => [ [ 'client_id' => 'abc' ] ] ], $user_id )
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_everybody_else_syncs_whatever_they_like(): void {
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/save',
+				[ 'room' => 'postType/post:' . $other_id ],
+				self::$admin_id
+			),
+			'Whose rooms an ordinary account may join is Gutenberg\'s own business.'
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_other_routes_are_left_alone(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertNull(
+			$this->ask_for_room( '/wp/v2/posts', [ 'room' => 'postType/post:999999' ], $user_id )
 		);
 	}
 

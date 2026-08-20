@@ -691,6 +691,81 @@ function filter_rest_pre_insert( $prepared_post, $request ) {
 }
 
 /**
+ * Keeps a collaborator's real-time session to the post they were invited to.
+ *
+ * Gutenberg's sync endpoints take bare `edit_posts` as their floor — which
+ * every collaborator holds, since the editor will not render without it — and
+ * then check each room against whatever it names. For a room naming a post that
+ * second check is `edit_post`, which is this plugin's own grant and refuses
+ * every post but the shared one. For a room naming no object at all there is no
+ * second check: it falls back to the floor, and the floor lets them in.
+ *
+ * So the rooms are narrowed here, the way collections and inserts already are.
+ * The one room a collaborator may join is spelled out rather than parsed, so
+ * that nothing turns on this plugin and Gutenberg reading a room string the same
+ * way. Anything else is refused, a shape this does not recognise included — a
+ * session that turns out to need a second room should have it added on purpose
+ * rather than arrive through a gap.
+ *
+ * @param mixed           $result  Response to replace the requested version with.
+ * @param mixed           $server  Server instance.
+ * @param WP_REST_Request $request Request used to generate the response.
+ * @return mixed The result unchanged, or an error if a room is not theirs.
+ */
+function filter_sync_rooms( $result, $server, $request ) {
+	if ( null !== $result || ! $request instanceof WP_REST_Request ) {
+		return $result;
+	}
+
+	if ( ! str_starts_with( $request->get_route(), '/wp-sync/v1/' ) ) {
+		return $result;
+	}
+
+	$collaboration_request = Collaboration_Request::get_for_user( get_current_user_id() );
+
+	if ( ! $collaboration_request instanceof Collaboration_Request ) {
+		return $result;
+	}
+
+	$parent = $collaboration_request->get_parent();
+
+	$rooms = [];
+	$room  = $request['room'];
+
+	if ( is_string( $room ) ) {
+		$rooms[] = $room;
+	}
+
+	$requested = $request['rooms'];
+
+	if ( is_array( $requested ) ) {
+		foreach ( $requested as $entry ) {
+			// `/updates` names each room inside an object, alongside the client
+			// asking for it; `/save` sends the string on its own.
+			$rooms[] = is_array( $entry ) && isset( $entry['room'] ) ? $entry['room'] : $entry;
+		}
+	}
+
+	$own = $parent instanceof WP_Post
+		? sprintf( 'postType/%s:%d', $parent->post_type, $parent->ID )
+		: null;
+
+	foreach ( $rooms as $entry ) {
+		if ( null !== $own && is_string( $entry ) && $own === $entry ) {
+			continue;
+		}
+
+		return new WP_Error(
+			'public_collaboration_forbidden_room',
+			__( 'Sorry, you are only allowed to work on the post you were invited to.', 'public-collaboration' ),
+			[ 'status' => rest_authorization_required_code() ]
+		);
+	}
+
+	return $result;
+}
+
+/**
  * Adds a cron schedule for running every 15 minutes.
  *
  * @param array $schedules Cron schedules.
