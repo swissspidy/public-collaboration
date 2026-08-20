@@ -18,14 +18,16 @@ Somebody needs to fix a paragraph, or drop in the photos they took, or check the
 
 This plugin removes all of that. While editing a post, open **Public collaboration** in the settings sidebar and click **Share link**. A QR code and a link appear. Send the link to whoever is helping, and they land in the editor for that post — no account, no password, nothing to install.
 
+The panel lists every link you have handed out that is still live, so you can open one again, change what it allows, or revoke it on the spot.
+
 = What they can do =
 
-You choose, before or while sharing:
+You choose when you share, and can change your mind for as long as the link lasts:
 
 * **Edit post content** — write and rearrange the post itself.
 * **Upload media files** — add images, video, and audio.
 
-Untick a box and it takes effect on the page they are already looking at.
+Turn a switch off and it takes effect on the page they are already looking at, whether you are sharing the link or came back to it afterwards.
 
 = What they cannot do =
 
@@ -40,7 +42,7 @@ You can never share more than you have yourself — if you cannot upload media, 
 
 = Nothing is left behind =
 
-Each link lasts 15 minutes and has a random, unguessable address. When it expires, or when you close the sharing dialog, the link and the temporary account behind it are deleted. What your collaborator wrote stays in the post, credited and intact.
+Each link lasts 15 minutes and has a random, unguessable address. When it expires, or when you revoke it, the link and the temporary account behind it are deleted. What your collaborator wrote stays in the post, credited and intact.
 
 == Frequently Asked Questions ==
 
@@ -58,7 +60,7 @@ Yes — WordPress's usual "somebody else is editing this post" lock is stood dow
 
 = Can I take access away sooner? =
 
-Yes. Closing the sharing dialog revokes the link immediately, and untick a capability at any time to take just that part away.
+Yes. Revoke the link in the **Public collaboration** panel and it stops working immediately, or turn off one of its switches at any time to take just that part away.
 
 = Why does this need the Gutenberg plugin? =
 
@@ -71,7 +73,7 @@ Whatever was saved stays in the post. The temporary account is deleted, and its 
 == Screenshots ==
 
 1. The "Public collaboration" panel in the post settings sidebar.
-2. The QR code, link, and capability choices shown when sharing.
+2. The QR code, link, and permissions shown when sharing.
 3. The greeting a collaborator sees when they follow the link.
 
 == Changelog ==

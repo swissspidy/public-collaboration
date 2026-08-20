@@ -138,6 +138,121 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 	}
 
 	/**
+	 * @covers ::get_items
+	 * @covers \PublicCollaboration\Collaboration_Request::get_for_post
+	 */
+	public function test_get_items_lists_the_live_links_to_a_post(): void {
+		$first  = $this->create_request();
+		$second = $this->create_request( [ 'edit' ] );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$response = rest_get_server()->dispatch( $request );
+		$data     = (array) $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[ $first['token'], $second['token'] ],
+			array_column( $data, 'token' ),
+			'Oldest first, so the panel does not reshuffle as links are handed out.'
+		);
+		$this->assertSame( [ 'edit' ], $data[1]['capabilities'] );
+	}
+
+	/**
+	 * @covers ::get_items
+	 */
+	public function test_get_items_only_lists_the_links_to_the_post_asked_about(): void {
+		$created  = $this->create_request();
+		$other_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => self::$admin_id,
+			]
+		);
+
+		$other = new WP_REST_Request( 'POST', self::ROUTE );
+		$other->set_param( 'post', $other_id );
+
+		$this->assertSame( 201, rest_get_server()->dispatch( $other )->get_status() );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$this->assertSame(
+			[ $created['token'] ],
+			array_column( (array) rest_get_server()->dispatch( $request )->get_data(), 'token' )
+		);
+	}
+
+	/**
+	 * A link nobody may follow any more is not one the panel should offer back.
+	 *
+	 * @covers ::get_items
+	 * @covers \PublicCollaboration\Collaboration_Request::get_for_post
+	 */
+	public function test_get_items_leaves_out_links_that_have_run_out_of_time(): void {
+		$created               = $this->create_request();
+		$collaboration_request = Collaboration_Request::get_by_token( (string) $created['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $collaboration_request );
+
+		update_post_meta(
+			$collaboration_request->get_post()->ID,
+			Collaboration_Request::META_EXPIRES_AT,
+			time() - 1
+		);
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$this->assertSame( [], rest_get_server()->dispatch( $request )->get_data() );
+	}
+
+	/**
+	 * @covers ::get_items_permissions_check
+	 */
+	public function test_get_items_requires_a_post(): void {
+		$this->assertErrorResponse(
+			'rest_missing_callback_param',
+			rest_get_server()->dispatch( new WP_REST_Request( 'GET', self::ROUTE ) ),
+			400
+		);
+	}
+
+	/**
+	 * @covers ::get_items_permissions_check
+	 */
+	public function test_get_items_rejects_a_post_that_does_not_exist(): void {
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post', 999999 );
+
+		$this->assertErrorResponse(
+			'public_collaboration_invalid_post',
+			rest_get_server()->dispatch( $request ),
+			404
+		);
+	}
+
+	/**
+	 * @covers ::get_items_permissions_check
+	 * @covers ::can_manage_links
+	 */
+	public function test_get_items_requires_being_able_to_edit_the_post(): void {
+		wp_set_current_user( self::$subscriber_id );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$this->assertErrorResponse(
+			'public_collaboration_cannot_view_links',
+			rest_get_server()->dispatch( $request ),
+			403
+		);
+	}
+
+	/**
 	 * @covers ::create_item
 	 * @covers ::prepare_item_for_response
 	 */
@@ -608,6 +723,26 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 		);
 
 		$attempt = new WP_REST_Request( 'POST', self::ROUTE );
+		$attempt->set_param( 'post', self::$post_id );
+
+		$this->assertSame( 403, rest_get_server()->dispatch( $attempt )->get_status() );
+	}
+
+	/**
+	 * Listing is managing, and a collaborator manages nothing.
+	 *
+	 * @covers ::get_items_permissions_check
+	 * @covers ::can_manage_links
+	 */
+	public function test_a_collaborator_cannot_list_the_links_to_the_post(): void {
+		$created = $this->create_request();
+		$request = Collaboration_Request::get_by_token( (string) $created['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$attempt = new WP_REST_Request( 'GET', self::ROUTE );
 		$attempt->set_param( 'post', self::$post_id );
 
 		$this->assertSame( 403, rest_get_server()->dispatch( $attempt )->get_status() );

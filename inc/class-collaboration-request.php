@@ -247,6 +247,52 @@ final class Collaboration_Request {
 	}
 
 	/**
+	 * Returns the collaboration requests for a given post that are still usable.
+	 *
+	 * Expired requests are left out, on the same reasoning as
+	 * {@see Collaboration_Request::get_by_token()}: cleanup runs on cron, which
+	 * is unreliable on low-traffic sites, so a link nobody may follow any more
+	 * has no business being listed as one somebody could.
+	 *
+	 * @param int $post_id ID of the post being collaborated on.
+	 * @return Collaboration_Request[] Collaboration requests, oldest first.
+	 */
+	public static function get_for_post( int $post_id ): array {
+		if ( $post_id <= 0 ) {
+			return [];
+		}
+
+		$posts = get_posts(
+			[
+				'post_parent'            => $post_id,
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'publish',
+				// A ceiling rather than a page: every link expires within the
+				// quarter of an hour it was minted in, so a post cannot
+				// plausibly have this many live at once.
+				'numberposts'            => 100,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'suppress_filters'       => false,
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		$requests = [];
+
+		foreach ( $posts as $post ) {
+			$request = new self( $post );
+
+			if ( ! $request->is_expired() ) {
+				$requests[] = $request;
+			}
+		}
+
+		return $requests;
+	}
+
+	/**
 	 * Returns the collaboration request for a given post, regardless of whether it has expired.
 	 *
 	 * @param WP_Post $post The collaboration request post.

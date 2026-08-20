@@ -26,9 +26,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * Lives in this plugin's own namespace rather than extending the core posts
  * controller. A collaboration request is not a post anybody edits — it is a
- * token with an expiry date, and the four things you can do with one (mint it,
- * watch it, change what it grants, revoke it) are not the ones
- * `WP_REST_Posts_Controller` exists to offer.
+ * token with an expiry date, and the things you can do with one (mint it, list
+ * the live ones for a post, watch it, change what it grants, revoke it) are not
+ * the ones `WP_REST_Posts_Controller` exists to offer.
  */
 class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	/**
@@ -59,6 +59,12 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			self::REST_NAMESPACE,
 			'/' . self::REST_BASE,
 			[
+				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_items' ],
+					'permission_callback' => [ $this, 'get_items_permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
 				[
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => [ $this, 'create_item' ],
@@ -127,6 +133,57 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Checks whether the current user may see the links to a given post.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
+	 */
+	public function get_items_permissions_check( $request ) {
+		$post_id = $this->get_post_id( $request );
+
+		if ( ! get_post( $post_id ) instanceof WP_Post ) {
+			return new WP_Error(
+				'public_collaboration_invalid_post',
+				__( 'That post could not be found.', 'public-collaboration' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		if ( ! $this->can_manage_links( $post_id ) ) {
+			return new WP_Error(
+				'public_collaboration_cannot_view_links',
+				__( 'Sorry, you are not allowed to view the collaboration links for this post.', 'public-collaboration' ),
+				[ 'status' => rest_authorization_required_code() ]
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns the live collaboration requests for a post.
+	 *
+	 * This is what the editor's panel is built from, so that the links somebody
+	 * has handed out are still there to be revoked after a reload — and so that
+	 * what it lists is the server's idea of which ones are live, not the
+	 * browser's memory of the ones it happened to mint itself.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response Response object.
+	 */
+	public function get_items( $request ): WP_REST_Response {
+		$items = [];
+
+		foreach ( Collaboration_Request::get_for_post( $this->get_post_id( $request ) ) as $collaboration_request ) {
+			$items[] = $this->prepare_response_for_collection(
+				$this->prepare_item_for_response( $collaboration_request, $request )
+			);
+		}
+
+		return new WP_REST_Response( $items );
+	}
+
+	/**
 	 * Checks whether the current user may share a given post.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -144,7 +201,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			);
 		}
 
-		if ( $this->is_collaborator() || ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( ! $this->can_manage_links( $post_id ) ) {
 			return new WP_Error(
 				'public_collaboration_cannot_share',
 				__( 'Sorry, you are not allowed to share this post for collaboration.', 'public-collaboration' ),
@@ -346,6 +403,20 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Checks whether the current user may manage the collaboration links to a post.
+	 *
+	 * Whoever may edit the post may share it, list what has been shared, and
+	 * revoke any of it. The one exception is somebody who is here on a link
+	 * themselves; see {@see REST_Collaboration_Requests_Controller::is_collaborator()}.
+	 *
+	 * @param int $post_id ID of the post being collaborated on.
+	 * @return bool Whether the current user may manage the post's links.
+	 */
+	private function can_manage_links( int $post_id ): bool {
+		return ! $this->is_collaborator() && current_user_can( 'edit_post', $post_id );
+	}
+
+	/**
 	 * Whether the current user is here on a collaboration link themselves.
 	 *
 	 * Being able to edit the post is what decides who may manage its links, and
@@ -436,6 +507,29 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 		// Constructed directly rather than through rest_ensure_response(), which
 		// is documented as also returning WP_Error and would widen the signature.
 		return new WP_REST_Response( $data );
+	}
+
+	/**
+	 * Retrieves the query parameters for the collection.
+	 *
+	 * Deliberately not the inherited set: there is nothing here to search,
+	 * order, or page through — a post has a handful of live links at most, and
+	 * they are only ever wanted all at once.
+	 *
+	 * @return array Collection parameters.
+	 *
+	 * @phpstan-return array<string, mixed>
+	 */
+	public function get_collection_params(): array {
+		return [
+			'context' => $this->get_context_param( [ 'default' => 'view' ] ),
+			'post'    => [
+				'description' => __( 'ID of the post to list collaboration requests for.', 'public-collaboration' ),
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'required'    => true,
+			],
+		];
 	}
 
 	/**

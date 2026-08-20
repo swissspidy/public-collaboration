@@ -132,11 +132,16 @@ class Collaboration {
 
 	/**
 	 * Shares the post being edited, and returns the link to hand out.
+	 *
+	 * The button says so itself once the post has links already, since
+	 * clicking it again hands out another one rather than showing the first.
 	 */
 	async shareLink(): Promise< string > {
 		const panel = await this.openPanel();
 
-		await panel.getByRole( 'button', { name: 'Share link' } ).click();
+		await panel
+			.getByRole( 'button', { name: /^Share (another )?link$/ } )
+			.click();
 
 		const dialog = this.getDialog();
 
@@ -152,6 +157,34 @@ class Collaboration {
 		return this.page.getByRole( 'dialog', {
 			name: 'Share for collaboration',
 		} );
+	}
+
+	/**
+	 * The links this post has been shared with, as the panel lists them.
+	 *
+	 * Located by the list itself rather than by role alone: the settings
+	 * sidebar is full of other people's lists.
+	 */
+	getLinks(): Locator {
+		return this.page
+			.locator( '.public-collaboration-links' )
+			.getByRole( 'listitem' );
+	}
+
+	/**
+	 * Opens the dialog for a link the panel is listing.
+	 *
+	 * What names that button is the link's own description — who has it, and
+	 * how long it has left — which is no way for a test to ask for the second
+	 * one, so this counts instead.
+	 *
+	 * @param index Which of the listed links to open. Defaults to the first.
+	 */
+	async showLink( index = 0 ): Promise< void > {
+		await this.getLinks()
+			.nth( index )
+			.locator( '.public-collaboration-links__link' )
+			.click();
 	}
 }
 

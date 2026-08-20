@@ -25,7 +25,7 @@ Use [WordPress Playground](https://wordpress.org/playground/) to try this plugin
 
 ## How it works
 
-While editing a post, **Public collaboration** appears in the settings sidebar. Clicking **Share link** creates a short-lived collaboration request and shows its link as a QR code.
+While editing a post, **Public collaboration** appears in the settings sidebar. Clicking **Share link** creates a short-lived collaboration request and shows its link as a QR code. Closing that dialog leaves the link working: the panel lists every link to the post that is still live, so each one can be opened again, have what it grants changed, or be revoked for as long as it lasts.
 
 A collaboration request is a post of a private, UI-less post type whose slug is a 128-bit random token, with the post being shared as its parent. That token is the only credential involved, so it is treated as one:
 
@@ -40,7 +40,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 
 Unknown, expired, and inaccessible tokens all return the same 404, so the endpoint cannot be used to find out which tokens exist.
 
-Following a working link signs the visitor in as a temporary account and drops them straight into the editor for that one post. Closing the dialog revokes the link immediately; otherwise it expires on its own.
+Following a working link signs the visitor in as a temporary account and drops them straight into the editor for that one post. Revoking a link from the panel deletes it, and the account with it; otherwise it expires on its own.
 
 ## Architecture notes
 
@@ -87,6 +87,7 @@ add_action(
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
+| `GET /public-collaboration/v1/collaboration-requests?post=<id>` | `edit_post` on the post | List the live links to a post |
 | `POST /public-collaboration/v1/collaboration-requests` | `edit_post` on the post, plus `upload_files` to grant uploads | Share a post |
 | `GET /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | See whether anybody has joined |
 | `PUT /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Change what the link grants |

@@ -192,6 +192,42 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	}
 
 	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_finds_every_live_request_for_a_post(): void {
+		$first  = $this->create_request();
+		$second = $this->create_request();
+
+		$this->assertSame(
+			[ $first->get_token(), $second->get_token() ],
+			array_map(
+				static fn ( Collaboration_Request $request ): string => $request->get_token(),
+				Collaboration_Request::get_for_post( self::$post_id )
+			),
+			'Oldest first, so the panel does not reshuffle as links are handed out.'
+		);
+	}
+
+	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_treats_an_expired_request_as_gone(): void {
+		$request = $this->create_request();
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+
+		$this->assertSame( [], Collaboration_Request::get_for_post( self::$post_id ) );
+	}
+
+	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_has_nothing_for_a_post_that_cannot_exist(): void {
+		$this->assertSame( [], Collaboration_Request::get_for_post( 0 ) );
+		$this->assertSame( [], Collaboration_Request::get_for_post( -1 ) );
+	}
+
+	/**
 	 * @covers ::from_post
 	 */
 	public function test_from_post_only_accepts_collaboration_requests(): void {

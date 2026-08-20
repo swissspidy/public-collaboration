@@ -42,7 +42,7 @@
 }
 
 .public-collaboration-modal__capabilities legend {
-	margin: 0 0 0.5em;
+	margin: 0 0 0.75em;
 	padding: 0;
 }
 
@@ -50,7 +50,34 @@
 	margin: 0 0 1.5em;
 }
 
-.public-collaboration-modal__actions {
-	display: flex;
-	justify-content: flex-end;
+.public-collaboration-links__title {
+	margin: 0;
+}
+
+.public-collaboration-links {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/*
+ * The link fills the row and the button that revokes it keeps its own size, so
+ * that a long name is what gives way rather than the way to take the link back.
+ */
+.public-collaboration-links__link.components-button {
+	flex-grow: 1;
+	min-width: 0;
+	height: auto;
+	min-height: 32px;
+	padding: 4px 8px;
+	text-align: left;
+}
+
+.public-collaboration-links__label {
+	width: 100%;
+	min-width: 0;
+}
+
+.public-collaboration-links__revoke.components-button {
+	flex-shrink: 0;
 }
