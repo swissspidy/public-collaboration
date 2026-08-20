@@ -7,24 +7,36 @@ import {
 	useBaseControlProps,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
+import { getDuration } from '../expiry';
 import { CollaborationModal } from './modal';
 import { LinkList } from './link-list';
 import { useCollaborationRequests } from './use-collaboration-requests';
+
+/** How long a link lasts, for a page that somehow did not say. */
+const DEFAULT_TTL = 15 * 60;
 
 /**
  * The control that mints collaboration links, and everything they lead to.
  */
 export function SharePanel() {
+	// Read rather than assumed: how long a link lasts is filterable, and the
+	// page is printed with whatever that filter had to say.
+	const ttl = window.publicCollaborationSettings?.ttl ?? DEFAULT_TTL;
+
 	const { baseControlProps, controlProps } = useBaseControlProps( {
 		__nextHasNoMarginBottom: true,
-		help: __(
-			'Share a link that lets somebody work on this post with you for the next 15 minutes. They do not need an account.',
-			'public-collaboration'
+		help: sprintf(
+			/* translators: %s: How long a link lasts, e.g. "15 minutes". */
+			__(
+				'Share a link that lets somebody work on this post with you for the next %s. They do not need an account.',
+				'public-collaboration'
+			),
+			getDuration( ttl )
 		),
 	} );
 

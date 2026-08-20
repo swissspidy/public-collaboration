@@ -24,7 +24,7 @@ import { copy } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getTimeLeft } from './expiry';
+import { getTimeLeft } from '../expiry';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 import './editor.css';
 
@@ -54,7 +54,7 @@ const CAPABILITY_OPTIONS: Array< {
 interface CollaborationModalProps {
 	/** The collaboration request being shown. */
 	request: CollaborationRequest;
-	/** Whether the link was just minted, and so can still be taken back. */
+	/** Whether the link was just minted, and so can still be called off. */
 	isNew: boolean;
 	/** Whether the link is being revoked right now. */
 	isRevoking: boolean;
@@ -63,7 +63,7 @@ interface CollaborationModalProps {
 		capability: CollaborationCapability,
 		enabled: boolean
 	) => void;
-	/** Called when the person takes back a link they have just minted. */
+	/** Called when the person takes the link back. */
 	onRevoke: () => void;
 	/** Called when the person is done with the dialog. */
 	onRequestClose: () => void;
@@ -77,10 +77,10 @@ interface CollaborationModalProps {
  *
  * @param props                    Component props.
  * @param props.request            The collaboration request being shown.
- * @param props.isNew              Whether the link was just minted, and so can still be taken back.
+ * @param props.isNew              Whether the link was just minted, and so can still be called off.
  * @param props.isRevoking         Whether the link is being revoked right now.
  * @param props.onToggleCapability Called when a capability is switched on or off.
- * @param props.onRevoke           Called when the person takes back a link they have just minted.
+ * @param props.onRevoke           Called when the person takes the link back.
  * @param props.onRequestClose     Called when the person is done with the dialog.
  */
 export function CollaborationModal( {
@@ -201,18 +201,26 @@ export function CollaborationModal( {
 			</p>
 
 			<HStack justify="flex-end">
-				{ isNew && (
-					<Button
-						__next40pxDefaultSize
-						variant="tertiary"
-						onClick={ onRevoke }
-						isBusy={ isRevoking }
-						disabled={ isRevoking }
-						accessibleWhenDisabled
-					>
-						{ __( 'Cancel', 'public-collaboration' ) }
-					</Button>
-				) }
+				{ /*
+				 * The same thing either way, under the name that fits what has
+				 * happened to the link so far. Calling off one that has only
+				 * just been minted is undoing a click; revoking one that has
+				 * been handed out takes it away from somebody, which is worth
+				 * both the longer word and the colour that goes with it.
+				 */ }
+				<Button
+					__next40pxDefaultSize
+					variant="tertiary"
+					isDestructive={ ! isNew }
+					onClick={ onRevoke }
+					isBusy={ isRevoking }
+					disabled={ isRevoking }
+					accessibleWhenDisabled
+				>
+					{ isNew
+						? __( 'Cancel', 'public-collaboration' )
+						: __( 'Revoke link', 'public-collaboration' ) }
+				</Button>
 
 				<Button
 					__next40pxDefaultSize

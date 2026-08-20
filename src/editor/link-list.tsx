@@ -13,7 +13,7 @@ import { closeSmall } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getTimeLeft } from './expiry';
+import { getTimeLeft } from '../expiry';
 import type { CollaborationRequest } from './types';
 import './editor.css';
 

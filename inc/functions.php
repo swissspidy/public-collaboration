@@ -163,6 +163,12 @@ function enqueue_block_editor_assets(): void {
 
 	wp_enqueue_script( 'public-collaboration-editor' );
 	wp_enqueue_style( 'public-collaboration-editor' );
+
+	wp_add_inline_script(
+		'public-collaboration-editor',
+		sprintf( 'window.publicCollaborationSettings = %s;', wp_json_encode( get_sharing_settings() ) ),
+		'before'
+	);
 }
 
 /**
@@ -191,6 +197,22 @@ function get_collaborator_data( Collaboration_Request $request ): array {
 		'expiresAt'   => $request->get_expires_at(),
 		'canEdit'     => $request->allows( Collaboration_Request::CAP_EDIT ),
 		'canUpload'   => $request->allows( Collaboration_Request::CAP_UPLOAD ),
+	];
+}
+
+/**
+ * Returns what the sharing panel needs to know about the links it hands out.
+ *
+ * How long a link lasts is filterable, so the panel is told what it is rather
+ * than left repeating the default back to somebody who has changed it.
+ *
+ * @return array Sharing settings.
+ *
+ * @phpstan-return array<string, mixed>
+ */
+function get_sharing_settings(): array {
+	return [
+		'ttl' => Collaboration_Request::get_ttl(),
 	];
 }
 

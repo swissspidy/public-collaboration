@@ -148,6 +148,28 @@ test.describe( 'Sharing a post', () => {
 			.toBe( 404 );
 	} );
 
+	test( 'revokes a handed-out link from its own dialog', async ( {
+		secondPage,
+		collaboration,
+	} ) => {
+		const url = await collaboration.shareLink();
+		const dialog = collaboration.getDialog();
+
+		await dialog.getByRole( 'button', { name: 'Done' } ).click();
+		await collaboration.showLink();
+
+		await dialog.getByRole( 'button', { name: 'Revoke link' } ).click();
+
+		await expect( dialog ).toBeHidden();
+		await expect( collaboration.getLinks() ).toHaveCount( 0 );
+
+		await expect
+			.poll( async () => ( await secondPage.goto( url ) )?.status(), {
+				timeout: 10_000,
+			} )
+			.toBe( 404 );
+	} );
+
 	test( 'changes what a link grants after handing it out', async ( {
 		page,
 		collaboration,
@@ -164,10 +186,13 @@ test.describe( 'Sharing a post', () => {
 		await expect( dialog ).toBeVisible();
 
 		// Cancelling belongs to a link that has only just been minted. This one
-		// has been handed out, and taking it back is the panel's business.
+		// has been handed out, so taking it back is called what it is.
 		await expect(
 			dialog.getByRole( 'button', { name: 'Cancel' } )
 		).toHaveCount( 0 );
+		await expect(
+			dialog.getByRole( 'button', { name: 'Revoke link' } )
+		).toBeVisible();
 
 		const upload = dialog.getByRole( 'checkbox', {
 			name: 'Upload media files',
