@@ -114,6 +114,24 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The REST controller refuses this as well, and neither refusal is there to
+	 * lean on the other: everything a collaborator can do is lent to them for a
+	 * quarter of an hour, and minting more links is not on the list.
+	 *
+	 * @covers ::create
+	 */
+	public function test_create_refuses_a_collaborator(): void {
+		$request = $this->create_request();
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$attempt = Collaboration_Request::create( [ 'post' => self::$post_id ] );
+
+		$this->assertWPError( $attempt );
+		$this->assertSame( 'public_collaboration_cannot_share', $attempt->get_error_code() );
+	}
+
+	/**
 	 * @covers ::get_expires_at
 	 * @covers ::is_expired
 	 */

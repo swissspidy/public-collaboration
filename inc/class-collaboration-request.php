@@ -117,6 +117,21 @@ final class Collaboration_Request {
 	 * @phpstan-param array{post: int, capabilities?: string[]} $args
 	 */
 	public static function create( array $args ) {
+		/*
+		 * Belt and braces with the REST controller's own refusal. Everything a
+		 * collaborator can do is lent to them for a quarter of an hour, and
+		 * minting links is not on the list — so the answer is the same however
+		 * this is reached, and does not depend on the one caller that exists
+		 * today remembering to ask.
+		 */
+		if ( is_collaborator( get_current_user_id() ) ) {
+			return new WP_Error(
+				'public_collaboration_cannot_share',
+				__( 'Sorry, you are not allowed to share this post for collaboration.', 'public-collaboration' ),
+				[ 'status' => 403 ]
+			);
+		}
+
 		$parent = get_post( $args['post'] );
 
 		if ( ! $parent instanceof WP_Post ) {

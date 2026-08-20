@@ -54,6 +54,8 @@ const CAPABILITY_OPTIONS: Array< {
 interface CollaborationModalProps {
 	/** The collaboration request being shown. */
 	request: CollaborationRequest;
+	/** What the person sharing may hand out, which is never more than they have. */
+	grantable: CollaborationCapability[];
 	/** Whether the link was just minted, and so can still be called off. */
 	isNew: boolean;
 	/** Whether the link is being revoked right now. */
@@ -77,6 +79,7 @@ interface CollaborationModalProps {
  *
  * @param props                    Component props.
  * @param props.request            The collaboration request being shown.
+ * @param props.grantable          What the person sharing may hand out, which is never more than they have.
  * @param props.isNew              Whether the link was just minted, and so can still be called off.
  * @param props.isRevoking         Whether the link is being revoked right now.
  * @param props.onToggleCapability Called when a capability is switched on or off.
@@ -85,6 +88,7 @@ interface CollaborationModalProps {
  */
 export function CollaborationModal( {
 	request,
+	grantable,
 	isNew,
 	isRevoking,
 	onToggleCapability,
@@ -92,6 +96,17 @@ export function CollaborationModal( {
 	onRequestClose,
 }: CollaborationModalProps ) {
 	const { createNotice } = useDispatch( noticesStore );
+
+	/*
+	 * A capability the sharer cannot hand out is not offered, because the server
+	 * would refuse it — but one this link already grants stays on screen even
+	 * so, since taking something away is always theirs to do.
+	 */
+	const options = CAPABILITY_OPTIONS.filter(
+		( option ) =>
+			grantable.includes( option.value ) ||
+			request.capabilities.includes( option.value )
+	);
 
 	const copyRef = useCopyToClipboard( request.url, () => {
 		void createNotice(
@@ -160,7 +175,7 @@ export function CollaborationModal( {
 				</legend>
 
 				<VStack spacing={ 4 }>
-					{ CAPABILITY_OPTIONS.map( ( option ) => (
+					{ options.map( ( option ) => (
 						<ToggleControl
 							key={ option.value }
 							__nextHasNoMarginBottom

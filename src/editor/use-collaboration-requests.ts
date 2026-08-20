@@ -11,14 +11,29 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { getSettings } from './settings';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 
 const REST_BASE = '/public-collaboration/v1/collaboration-requests';
 
-/** How often to ask the server what is still live, in milliseconds. */
-const POLL_INTERVAL = 5000;
+/**
+ * How often to ask the server what is still live, in milliseconds.
+ *
+ * Quickly while a dialog is open, where somebody is watching for an arrival and
+ * for what is left of the quarter of an hour. The panel on its own is ambient,
+ * and asking every few seconds on the chance that something has changed is more
+ * than it is worth.
+ */
+const POLL_INTERVAL = 30000;
+const WATCHED_POLL_INTERVAL = 5000;
 
-const DEFAULT_CAPABILITIES: CollaborationCapability[] = [ 'edit', 'upload' ];
+/*
+ * Never more than the sharer has themselves: the server refuses to lend out an
+ * upload to somebody who cannot upload, so the panel does not offer it and a
+ * new link is not minted asking for it.
+ */
+const EVERYTHING: CollaborationCapability[] = [ 'edit', 'upload' ];
+const EDITING_ONLY: CollaborationCapability[] = [ 'edit' ];
 
 /** Which link the dialog is showing, and how it came to be showing it. */
 interface OpenLink {
@@ -102,6 +117,9 @@ export function useCollaborationRequests() {
 	const sharedPostId =
 		! isNew && typeof postId === 'number' && postId > 0 ? postId : null;
 
+	/** What this person may hand out, and so what a new link is minted with. */
+	const grantable = getSettings().canUpload ? EVERYTHING : EDITING_ONLY;
+
 	// Kept in refs so that the poll can read the current state without being
 	// torn down and set up again every time any of it changes.
 	const requestsRef = useRef( requests );
@@ -140,6 +158,7 @@ export function useCollaborationRequests() {
 	// Only worth asking again and again while there is something to watch: who
 	// has turned up, and how much of the quarter of an hour each link has left.
 	const isWatching = requests.length > 0;
+	const isShowingDialog = null !== open;
 
 	useEffect( () => {
 		if ( null === sharedPostId ) {
@@ -218,14 +237,23 @@ export function useCollaborationRequests() {
 		void read();
 
 		const interval = isWatching
-			? setInterval( read, POLL_INTERVAL )
+			? setInterval(
+					read,
+					isShowingDialog ? WATCHED_POLL_INTERVAL : POLL_INTERVAL
+			  )
 			: undefined;
 
 		return () => {
 			cancelled = true;
 			clearInterval( interval );
 		};
-	}, [ sharedPostId, isWatching, applyRequests, createErrorNotice ] );
+	}, [
+		sharedPostId,
+		isWatching,
+		isShowingDialog,
+		applyRequests,
+		createErrorNotice,
+	] );
 
 	const create = useCallback( async () => {
 		if ( null === sharedPostId ) {
@@ -240,7 +268,7 @@ export function useCollaborationRequests() {
 				method: 'POST',
 				data: {
 					post: sharedPostId,
-					capabilities: DEFAULT_CAPABILITIES,
+					capabilities: grantable,
 				},
 			} );
 
@@ -262,7 +290,7 @@ export function useCollaborationRequests() {
 		} finally {
 			setIsCreating( false );
 		}
-	}, [ applyRequests, createErrorNotice, sharedPostId ] );
+	}, [ applyRequests, createErrorNotice, grantable, sharedPostId ] );
 
 	/*
 	 * A link only leaves the list once the server says it is gone. Dropping it
@@ -441,6 +469,8 @@ export function useCollaborationRequests() {
 		revoking,
 		/** Whether the post has been saved at least once, so it has something to share. */
 		canShare: null !== sharedPostId,
+		/** What this person may hand out, which is never more than they have. */
+		grantable,
 		create,
 		revoke,
 		show,

@@ -54,7 +54,7 @@ Following a working link signs the visitor in as a temporary account and drops t
 
 **Core's post lock is stood down for a collaboration session.** The lock exists to stop two people silently overwriting each other, and it answers that by letting only one of them in. Sharing a post is a decision to have two people in it, so for a collaborator the lock has nothing useful left to say — it would greet them with "somebody else is editing" and, a heartbeat later, tell one of the two that the other had taken over. Collaborators are never shown the dialog and never take the lock, so whoever shared the post keeps it.
 
-**Sharing is not a way to give away more than you have.** A contributor who cannot upload media cannot hand out a link that can.
+**Sharing is not a way to give away more than you have.** A contributor who cannot upload media cannot hand out a link that can: the panel does not offer them the switch, and the endpoint refuses the capability if anything else asks for it. Nor is a collaboration link a way to mint more of them — somebody who is in the editor on a link of their own can neither share the post on nor revoke anybody's link, which the REST controller and the request model each refuse independently.
 
 ## Hooks
 
