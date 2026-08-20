@@ -76,9 +76,8 @@ jobs:
             fail-fast: false
             matrix:
                 # Every version between the floor the plugin claims and the
-                # newest there is. WordPress itself is pinned to the release
-                # this plugin targets, in .wp-env.json, so there is nothing to
-                # vary there.
+                # newest there is. Only PHP varies here: .wp-env.json leaves
+                # WordPress at whatever the latest release is.
                 php: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
 
         env:
