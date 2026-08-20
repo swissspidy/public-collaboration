@@ -227,7 +227,10 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	 * @covers ::get_for_post
 	 */
 	public function test_get_for_post_is_not_crowded_out_by_spent_requests(): void {
-		for ( $i = 0; $i < 3; $i++ ) {
+		// A hundred of them, because a hundred rows is what the ceiling this
+		// replaced would have read: with any fewer, the live link would still
+		// come back from the implementation this is here to rule out.
+		for ( $i = 0; $i < 100; $i++ ) {
 			$spent = $this->create_request();
 
 			update_post_meta( $spent->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
