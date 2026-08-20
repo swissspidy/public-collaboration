@@ -402,6 +402,11 @@ final class Collaboration_Request {
 	 * Anything not on the list of available capabilities is dropped, so that the
 	 * stored value can never grow beyond what this plugin knows how to grant.
 	 *
+	 * Non-strings are dropped first, on the same reasoning as {@see get_capabilities()}.
+	 * array_intersect() compares its arguments as strings but returns the values
+	 * it was given, so without this a value that merely casts to a capability
+	 * name would be written back as-is.
+	 *
 	 * @param string[] $capabilities Capability names.
 	 * @return void
 	 */
@@ -409,7 +414,9 @@ final class Collaboration_Request {
 		update_post_meta(
 			$this->post->ID,
 			self::META_CAPABILITIES,
-			array_values( array_intersect( $capabilities, self::get_available_capabilities() ) )
+			array_values(
+				array_intersect( array_filter( $capabilities, 'is_string' ), self::get_available_capabilities() )
+			)
 		);
 	}
 
