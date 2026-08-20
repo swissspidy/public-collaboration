@@ -24,7 +24,7 @@ import { copy } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getDuration, getTimeLeft, isActive } from '../expiry';
+import { getDuration, getTimeLeft, isActive, isEnding } from '../expiry';
 import { getSettings } from './settings';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 import './editor.css';
@@ -74,7 +74,24 @@ function describeStatus( request: CollaborationRequest ): string {
 		);
 	}
 
+	const { ttl } = getSettings();
+
 	if ( isActive( request.last_active ) ) {
+		// Past the ceiling on its whole life, a link ends when it ends, and
+		// saying it turns on their next change would be promising them time
+		// nothing is going to give.
+		if ( isEnding( request.expires_at, request.last_active, ttl ) ) {
+			return sprintf(
+				/* translators: 1: Display name of the collaborator. 2: Time left, e.g. "12 minutes". */
+				__(
+					'%1$s is working on this post with you. The link has been going a while, and stops working in %2$s.',
+					'public-collaboration'
+				),
+				request.collaborator,
+				getTimeLeft( request.expires_at )
+			);
+		}
+
 		return sprintf(
 			/* translators: 1: Display name of the collaborator. 2: Idle time, e.g. "15 minutes". */
 			__(
@@ -82,7 +99,7 @@ function describeStatus( request: CollaborationRequest ): string {
 				'public-collaboration'
 			),
 			request.collaborator,
-			getDuration( getSettings().ttl )
+			getDuration( ttl )
 		);
 	}
 

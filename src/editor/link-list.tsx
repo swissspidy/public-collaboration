@@ -13,7 +13,8 @@ import { closeSmall } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getTimeLeft, isActive } from '../expiry';
+import { getTimeLeft, isActive, isEnding } from '../expiry';
+import { getSettings } from './settings';
 import type { CollaborationRequest } from './types';
 import './editor.css';
 
@@ -39,7 +40,13 @@ interface LinkListProps {
  * @param request The link being described.
  */
 function describeState( request: CollaborationRequest ): string {
-	if ( request.joined && isActive( request.last_active ) ) {
+	const ending = isEnding(
+		request.expires_at,
+		request.last_active,
+		getSettings().ttl
+	);
+
+	if ( request.joined && isActive( request.last_active ) && ! ending ) {
 		return __( 'Working on it now', 'public-collaboration' );
 	}
 
