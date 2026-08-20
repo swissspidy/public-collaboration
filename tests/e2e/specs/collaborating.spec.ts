@@ -126,6 +126,54 @@ test.describe( 'Following a collaboration link', () => {
 		await expect( welcome ).not.toContainText( 'upload images' );
 	} );
 
+	test( 'says so in the panel while they are working', async ( {
+		admin,
+		secondPage,
+		secondEditor,
+		collaboration,
+		createDraft,
+	} ) => {
+		await admin.editPost( await createDraft( 'Watched while written' ) );
+
+		const url = await collaboration.shareLink();
+
+		await collaboration
+			.getDialog()
+			.getByRole( 'button', { name: 'Done' } )
+			.click();
+
+		// Before anybody has come, the countdown is the useful thing to say.
+		await expect( collaboration.getLinks().first() ).toContainText(
+			'Expires in'
+		);
+
+		await secondPage.goto( url );
+
+		const welcome = secondPage.getByRole( 'dialog', {
+			name: 'You have been invited to help',
+		} );
+
+		await expect( welcome ).toBeVisible( { timeout: 60_000 } );
+		await welcome.getByRole( 'button', { name: 'Start editing' } ).click();
+		await expect( welcome ).toBeHidden();
+
+		await secondEditor.canvas
+			.getByRole( 'textbox', { name: 'Add title' } )
+			.fill( 'Written by somebody who is still here' );
+
+		await secondEditor.saveDraft();
+
+		/*
+		 * A change puts the expiry back, so a countdown would be describing a
+		 * moment that keeps not arriving. The panel says what is happening
+		 * instead, which is also the answer to the question the sharer has.
+		 */
+		await expect( collaboration.getLinks().first() ).toContainText(
+			'Working on it now',
+			{ timeout: 30_000 }
+		);
+	} );
+
 	test( 'does not let them hand the post on to anybody else', async ( {
 		admin,
 		secondPage,

@@ -266,6 +266,9 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 		$this->assertFalse( $data['joined'] );
 		$this->assertNull( $data['collaborator'] );
 		$this->assertGreaterThan( time(), $data['expires_at'] );
+
+		// Nothing has been changed yet, so the last change is the link itself.
+		$this->assertEqualsWithDelta( time(), $data['last_active'], 2 );
 	}
 
 	/**
@@ -573,7 +576,7 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 
 		$this->assertSame( 'collaboration-request', $schema['title'] );
 		$this->assertSame(
-			[ 'token', 'url', 'post', 'expires_at', 'capabilities', 'joined', 'collaborator' ],
+			[ 'token', 'url', 'post', 'expires_at', 'last_active', 'capabilities', 'joined', 'collaborator' ],
 			array_keys( $schema['properties'] )
 		);
 	}

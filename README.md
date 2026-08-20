@@ -32,7 +32,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 | | |
 |---|---|
 | Address | 32 hex characters from `random_bytes()` — not derived from the clock, not sequential |
-| Lifetime | 15 minutes, checked on every use rather than trusted to cron |
+| Lifetime | 15 minutes after the last change, up to 12 hours in all — checked on every use rather than trusted to cron |
 | Scope | One post. Not the post list, not the media library, not the rest of wp-admin |
 | Powers | Whatever the sharer switched on: edit the post, upload media, or neither |
 | Ceiling | Never more than the sharer has themselves |
@@ -42,14 +42,17 @@ Unknown, expired, and inaccessible tokens all return the same 404, so the endpoi
 
 Following a working link signs the visitor in as a temporary account and drops them straight into the editor for that one post. Revoking a link from the panel deletes it, and the account with it; otherwise it expires on its own.
 
+**Expiry slides forward as somebody works.** A quarter of an hour flat would take the link away mid-paragraph from the one person it was meant for, so the clock is counted from the last change rather than from the moment the link was minted — and reads do not count, since an editor left open talks to the server whether anybody is at the keyboard or not. Activity is recorded at most once a minute, and the whole thing stops at a ceiling of twelve hours, so a browser left open on a desk cannot hold a door open all week.
+
 ## Architecture notes
 
 **WordPress needs an account to hang permissions off, so it gets one.** A collaborator is a real WordPress user, created the first time somebody actually follows the link and deleted along with the request. It carries no role, and nothing is ever written to its capabilities: every capability it ends up with is worked out from the request at the moment the check is made, by a `user_has_cap` filter, and only for the one post. Let the link expire and the account can do nothing at all — which is what makes revoking it a single `wp_delete_post()` rather than an audit.
 
-**One capability is granted site-wide, on purpose.** The block editor will not render until it has read the post type in `edit` context, and that check is the bare `edit_posts` capability with no post attached — there is nothing to scope it to. On its own it grants very little: touching anybody else's post additionally needs `edit_others_posts`, which is only ever granted for the shared post. What it would otherwise allow is closed off in three places:
+**One capability is granted site-wide, on purpose.** The block editor will not render until it has read the post type in `edit` context, and that check is the bare `edit_posts` capability with no post attached — there is nothing to scope it to. On its own it grants very little: touching anybody else's post additionally needs `edit_others_posts`, which is only ever granted for the shared post. What it would otherwise allow is closed off in four places:
 
 - `rest_pre_insert_*` refuses a create from a collaborator, so `edit_posts` cannot become permission to add posts.
 - Any admin screen other than the shared post's editor redirects back to it.
+- `rest_pre_dispatch` narrows the real-time sync rooms to the shared post's own. Gutenberg's sync endpoints take `edit_posts` as a floor and then check each room against whatever it names: for a room naming a post that is `edit_post`, which refuses every post but the shared one, and for a room naming no object at all it is the floor again. The one room a collaborator may join is spelled out rather than parsed, so that nothing turns on this plugin and Gutenberg reading a room string the same way.
 - `rest_{$post_type}_query` narrows `edit` context collections to the shared post. Core reads `edit_posts` as permission to *list* posts in `edit` context, and that context carries `raw` fields — which for a password-protected post is the body behind the password, waved through by the usual per-post read check because the post is published. Narrowing the query rather than filtering the response means whatever core adds to `edit` context later cannot leak through a collection that can only ever return one post. `view` context is untouched, so anything a logged-out visitor could see is still there.
 
 **Core's post lock is stood down for a collaboration session.** The lock exists to stop two people silently overwriting each other, and it answers that by letting only one of them in. Sharing a post is a decision to have two people in it, so for a collaborator the lock has nothing useful left to say — it would greet them with "somebody else is editing" and, a heartbeat later, tell one of the two that the other had taken over. Collaborators are never shown the dialog and never take the lock, so whoever shared the post keeps it.
@@ -62,7 +65,8 @@ Following a working link signs the visitor in as a temporary account and drops t
 
 | Filter | Description |
 |---|---|
-| `public_collaboration_request_ttl` | How long a link stays valid, in seconds. Default 15 minutes, floor of 1 minute. |
+| `public_collaboration_request_ttl` | How long a link outlives the last change made through it, in seconds. Default 15 minutes, floor of 1 minute. |
+| `public_collaboration_request_max_lifetime` | The longest a link may live, however much is done through it, in seconds. Default 12 hours, never below the idle time. |
 | `public_collaboration_rewrite_slug` | URL prefix of the collaboration link. Default `collaborate`. |
 | `public_collaboration_template` | Absolute path to the template rendering the collaboration page. |
 

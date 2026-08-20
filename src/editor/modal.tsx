@@ -24,7 +24,8 @@ import { copy } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getTimeLeft } from '../expiry';
+import { getDuration, getTimeLeft, isActive, isEnding } from '../expiry';
+import { getSettings } from './settings';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 import './editor.css';
 
@@ -50,6 +51,68 @@ const CAPABILITY_OPTIONS: Array< {
 		),
 	},
 ];
+
+/**
+ * Says where a link stands, in a sentence under the switches.
+ *
+ * Three things it can be: nobody has come, somebody is here and working, or
+ * somebody is here and has stopped. Only the first and last are counting down —
+ * for the one in the middle the clock keeps being put back, so what is worth
+ * saying is what it takes to end it rather than when it will.
+ *
+ * @param request The link being described.
+ */
+function describeStatus( request: CollaborationRequest ): string {
+	if ( ! request.joined || ! request.collaborator ) {
+		return sprintf(
+			/* translators: %s: Time left, e.g. "12 minutes". */
+			__(
+				'Nobody has opened the link yet. It stops working in %s.',
+				'public-collaboration'
+			),
+			getTimeLeft( request.expires_at )
+		);
+	}
+
+	const { ttl } = getSettings();
+
+	if ( isActive( request.last_active ) ) {
+		// Past the ceiling on its whole life, a link ends when it ends, and
+		// saying it turns on their next change would be promising them time
+		// nothing is going to give.
+		if ( isEnding( request.expires_at, request.last_active, ttl ) ) {
+			return sprintf(
+				/* translators: 1: Display name of the collaborator. 2: Time left, e.g. "12 minutes". */
+				__(
+					'%1$s is working on this post with you. The link has been going a while, and stops working in %2$s.',
+					'public-collaboration'
+				),
+				request.collaborator,
+				getTimeLeft( request.expires_at )
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: Display name of the collaborator. 2: Idle time, e.g. "15 minutes". */
+			__(
+				'%1$s is working on this post with you. The link ends %2$s after their last change.',
+				'public-collaboration'
+			),
+			request.collaborator,
+			getDuration( ttl )
+		);
+	}
+
+	return sprintf(
+		/* translators: 1: Display name of the collaborator. 2: Time left, e.g. "12 minutes". */
+		__(
+			'%1$s has not changed anything for a while. The link stops working in %2$s.',
+			'public-collaboration'
+		),
+		request.collaborator,
+		getTimeLeft( request.expires_at )
+	);
+}
 
 interface CollaborationModalProps {
 	/** The collaboration request being shown. */
@@ -193,26 +256,7 @@ export function CollaborationModal( {
 			</fieldset>
 
 			<p className="public-collaboration-modal__status">
-				<Text variant="muted">
-					{ request.joined && request.collaborator
-						? sprintf(
-								/* translators: %s: Display name of the collaborator. */
-								__(
-									'%s is working on this post with you.',
-									'public-collaboration'
-								),
-								request.collaborator
-						  )
-						: __(
-								'Nobody has opened the link yet.',
-								'public-collaboration'
-						  ) }{ ' ' }
-					{ sprintf(
-						/* translators: %s: Time left, e.g. "12 minutes". */
-						__( 'It stops working in %s.', 'public-collaboration' ),
-						getTimeLeft( request.expires_at )
-					) }
-				</Text>
+				<Text variant="muted">{ describeStatus( request ) }</Text>
 			</p>
 
 			<HStack justify="flex-end">

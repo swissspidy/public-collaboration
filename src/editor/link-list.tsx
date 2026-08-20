@@ -13,7 +13,8 @@ import { closeSmall } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getTimeLeft } from '../expiry';
+import { getTimeLeft, isActive, isEnding } from '../expiry';
+import { getSettings } from './settings';
 import type { CollaborationRequest } from './types';
 import './editor.css';
 
@@ -26,6 +27,34 @@ interface LinkListProps {
 	onShow: ( token: string ) => void;
 	/** Called to revoke a link. */
 	onRevoke: ( token: string ) => void;
+}
+
+/**
+ * Says what a link is doing, for the line under its name.
+ *
+ * A countdown is the useful thing to say about a link nobody is using, and the
+ * wrong thing to say about one somebody is working on: it slides forward with
+ * every change they make, so a number ticking down would be describing a moment
+ * that keeps not arriving.
+ *
+ * @param request The link being described.
+ */
+function describeState( request: CollaborationRequest ): string {
+	const ending = isEnding(
+		request.expires_at,
+		request.last_active,
+		getSettings().ttl
+	);
+
+	if ( request.joined && isActive( request.last_active ) && ! ending ) {
+		return __( 'Working on it now', 'public-collaboration' );
+	}
+
+	return sprintf(
+		/* translators: %s: Time left, e.g. "12 minutes". */
+		__( 'Expires in %s', 'public-collaboration' ),
+		getTimeLeft( request.expires_at )
+	);
 }
 
 /**
@@ -93,14 +122,7 @@ export function LinkList( {
 									</Text>
 
 									<Text variant="muted" size="12">
-										{ sprintf(
-											/* translators: %s: Time left, e.g. "12 minutes". */
-											__(
-												'Expires in %s',
-												'public-collaboration'
-											),
-											getTimeLeft( request.expires_at )
-										) }
+										{ describeState( request ) }
 									</Text>
 								</VStack>
 							</Button>

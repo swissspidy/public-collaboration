@@ -14,6 +14,7 @@ use WP_Post;
 use WP_Post_Type;
 use WP_Query;
 use WP_REST_Request;
+use WP_REST_Response;
 use WP_User;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -688,6 +689,157 @@ function filter_rest_pre_insert( $prepared_post, $request ) {
 		__( 'Sorry, you are only allowed to work on the post you were invited to.', 'public-collaboration' ),
 		[ 'status' => rest_authorization_required_code() ]
 	);
+}
+
+/**
+ * Pushes a collaborator's expiry back whenever they change something.
+ *
+ * A link lasts a quarter of an hour after the last change, so something has to
+ * notice the changes. That is this: every request of theirs that wrote
+ * something and was not refused, which is a good deal narrower than every
+ * request they make.
+ *
+ * Reads deliberately do not count. The editor talks to the server constantly
+ * while it is open — polling for updates, asking who else is here — and a link
+ * that outlives a browser left open on a desk is not a link that expires. The
+ * one place that distinction is not the method's to make is the sync endpoint,
+ * where a poll carrying nothing is a POST like any other, so the updates it
+ * carries are what decides it.
+ *
+ * @param mixed           $response Result to send to the client.
+ * @param mixed           $handler  Route handler used for the request.
+ * @param WP_REST_Request $request  Request used to generate the response.
+ * @return mixed The response, untouched.
+ */
+function filter_touch_on_write( $response, $handler, $request ) {
+	if ( ! $request instanceof WP_REST_Request || is_wp_error( $response ) ) {
+		return $response;
+	}
+
+	if ( $response instanceof WP_REST_Response && $response->get_status() >= 400 ) {
+		return $response;
+	}
+
+	if ( \in_array( $request->get_method(), [ 'GET', 'HEAD', 'OPTIONS' ], true ) ) {
+		return $response;
+	}
+
+	if ( ! carries_changes( $request ) ) {
+		return $response;
+	}
+
+	$collaboration_request = Collaboration_Request::get_for_user( get_current_user_id() );
+
+	if ( $collaboration_request instanceof Collaboration_Request ) {
+		$collaboration_request->touch();
+	}
+
+	return $response;
+}
+
+/**
+ * Determines whether a request is one that changed something.
+ *
+ * Every write does, save for the sync endpoint's poll: it asks for what other
+ * people have done by posting what this person has done, and answers with an
+ * empty list of its own when that is nothing at all.
+ *
+ * @param WP_REST_Request $request Request used to generate the response.
+ * @return bool Whether the request carried a change.
+ */
+function carries_changes( WP_REST_Request $request ): bool {
+	if ( '/wp-sync/v1/updates' !== $request->get_route() ) {
+		return true;
+	}
+
+	$rooms = $request['rooms'];
+
+	if ( ! is_array( $rooms ) ) {
+		return false;
+	}
+
+	foreach ( $rooms as $room ) {
+		if ( is_array( $room ) && ! empty( $room['updates'] ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Keeps a collaborator's real-time session to the post they were invited to.
+ *
+ * Gutenberg's sync endpoints take bare `edit_posts` as their floor — which
+ * every collaborator holds, since the editor will not render without it — and
+ * then check each room against whatever it names. For a room naming a post that
+ * second check is `edit_post`, which is this plugin's own grant and refuses
+ * every post but the shared one. For a room naming no object at all there is no
+ * second check: it falls back to the floor, and the floor lets them in.
+ *
+ * So the rooms are narrowed here, the way collections and inserts already are.
+ * The one room a collaborator may join is spelled out rather than parsed, so
+ * that nothing turns on this plugin and Gutenberg reading a room string the same
+ * way. Anything else is refused, a shape this does not recognise included — a
+ * session that turns out to need a second room should have it added on purpose
+ * rather than arrive through a gap.
+ *
+ * @param mixed           $result  Response to replace the requested version with.
+ * @param mixed           $server  Server instance.
+ * @param WP_REST_Request $request Request used to generate the response.
+ * @return mixed The result unchanged, or an error if a room is not theirs.
+ */
+function filter_sync_rooms( $result, $server, $request ) {
+	if ( null !== $result || ! $request instanceof WP_REST_Request ) {
+		return $result;
+	}
+
+	if ( ! str_starts_with( $request->get_route(), '/wp-sync/v1/' ) ) {
+		return $result;
+	}
+
+	$collaboration_request = Collaboration_Request::get_for_user( get_current_user_id() );
+
+	if ( ! $collaboration_request instanceof Collaboration_Request ) {
+		return $result;
+	}
+
+	$parent = $collaboration_request->get_parent();
+
+	$rooms = [];
+	$room  = $request['room'];
+
+	if ( is_string( $room ) ) {
+		$rooms[] = $room;
+	}
+
+	$requested = $request['rooms'];
+
+	if ( is_array( $requested ) ) {
+		foreach ( $requested as $entry ) {
+			// `/updates` names each room inside an object, alongside the client
+			// asking for it; `/save` sends the string on its own.
+			$rooms[] = is_array( $entry ) && isset( $entry['room'] ) ? $entry['room'] : $entry;
+		}
+	}
+
+	$own = $parent instanceof WP_Post
+		? sprintf( 'postType/%s:%d', $parent->post_type, $parent->ID )
+		: null;
+
+	foreach ( $rooms as $entry ) {
+		if ( null !== $own && is_string( $entry ) && $own === $entry ) {
+			continue;
+		}
+
+		return new WP_Error(
+			'public_collaboration_forbidden_room',
+			__( 'Sorry, you are only allowed to work on the post you were invited to.', 'public-collaboration' ),
+			[ 'status' => rest_authorization_required_code() ]
+		);
+	}
+
+	return $result;
 }
 
 /**

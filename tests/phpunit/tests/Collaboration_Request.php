@@ -278,6 +278,101 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	}
 
 	/**
+	 * @covers ::touch
+	 * @covers ::get_last_active_at
+	 */
+	public function test_touch_pushes_the_expiry_back(): void {
+		$request = $this->create_request();
+		$post_id = $request->get_post()->ID;
+
+		// A minute into a quarter of an hour, with a minute's work behind it.
+		update_post_meta( $post_id, Collaboration_Request::META_EXPIRES_AT, time() + 14 * MINUTE_IN_SECONDS );
+		update_post_meta( $post_id, Collaboration_Request::META_LAST_ACTIVE_AT, time() - MINUTE_IN_SECONDS );
+
+		$this->assertTrue( $request->touch() );
+		$this->assertEqualsWithDelta(
+			time() + Collaboration_Request::DEFAULT_TTL,
+			$request->get_expires_at(),
+			2,
+			'The quarter of an hour starts again from the change.'
+		);
+		$this->assertEqualsWithDelta( time(), $request->get_last_active_at(), 2 );
+	}
+
+	/**
+	 * @covers ::touch
+	 */
+	public function test_touch_is_not_worth_a_write_more_than_once_a_minute(): void {
+		$request    = $this->create_request();
+		$expires_at = $request->get_expires_at();
+
+		$this->assertFalse( $request->touch(), 'The request was made a moment ago.' );
+		$this->assertSame( $expires_at, $request->get_expires_at() );
+	}
+
+	/**
+	 * @covers ::touch
+	 * @covers ::get_max_lifetime
+	 */
+	public function test_touch_stops_at_the_ceiling(): void {
+		$request = $this->create_request();
+		$post_id = $request->get_post()->ID;
+
+		add_filter( 'public_collaboration_request_max_lifetime', static fn (): int => 20 * MINUTE_IN_SECONDS );
+
+		// Minted a quarter of an hour ago, and still being worked on.
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_date'     => gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS ),
+			]
+		);
+
+		update_post_meta( $post_id, Collaboration_Request::META_LAST_ACTIVE_AT, time() - MINUTE_IN_SECONDS );
+
+		$found = Collaboration_Request::get_by_token( $request->get_token() );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $found );
+		$this->assertTrue( $found->touch() );
+		$this->assertEqualsWithDelta(
+			$found->get_created_at() + 20 * MINUTE_IN_SECONDS,
+			$found->get_expires_at(),
+			2,
+			'Five minutes left of the twenty it was allowed, not fifteen more.'
+		);
+
+		// And activity goes on being recorded once the expiry has stopped moving.
+		update_post_meta( $post_id, Collaboration_Request::META_LAST_ACTIVE_AT, time() - MINUTE_IN_SECONDS );
+
+		$this->assertTrue( $found->touch() );
+		$this->assertEqualsWithDelta( time(), $found->get_last_active_at(), 2 );
+	}
+
+	/**
+	 * @covers ::get_max_lifetime
+	 */
+	public function test_the_ceiling_is_never_below_the_idle_time(): void {
+		add_filter( 'public_collaboration_request_ttl', static fn (): int => HOUR_IN_SECONDS );
+		add_filter( 'public_collaboration_request_max_lifetime', static fn (): int => MINUTE_IN_SECONDS );
+
+		$this->assertSame( HOUR_IN_SECONDS, Collaboration_Request::get_max_lifetime() );
+	}
+
+	/**
+	 * @covers ::touch
+	 */
+	public function test_touch_does_not_bring_an_expired_request_back(): void {
+		$request = $this->create_request();
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_LAST_ACTIVE_AT, time() - HOUR_IN_SECONDS );
+
+		$this->assertFalse( $request->touch() );
+		$this->assertTrue( $request->is_expired() );
+	}
+
+	/**
 	 * @covers ::from_post
 	 */
 	public function test_from_post_only_accepts_collaboration_requests(): void {

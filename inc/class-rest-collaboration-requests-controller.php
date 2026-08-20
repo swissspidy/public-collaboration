@@ -493,6 +493,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			'url'          => $item->get_url(),
 			'post'         => $item->get_parent_id(),
 			'expires_at'   => $item->get_expires_at(),
+			'last_active'  => $item->get_last_active_at(),
 			'capabilities' => $item->get_capabilities(),
 			'joined'       => $user instanceof WP_User,
 			'collaborator' => $user instanceof WP_User ? $user->display_name : null,
@@ -564,6 +565,12 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 				],
 				'expires_at'   => [
 					'description' => __( 'Unix timestamp at which the collaboration request expires.', 'public-collaboration' ),
+					'type'        => 'integer',
+					'context'     => [ 'view', 'edit' ],
+					'readonly'    => true,
+				],
+				'last_active'  => [
+					'description' => __( 'Unix timestamp of the collaborator\'s last change.', 'public-collaboration' ),
 					'type'        => 'integer',
 					'context'     => [ 'view', 'edit' ],
 					'readonly'    => true,

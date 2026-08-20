@@ -23,6 +23,8 @@ use function PublicCollaboration\get_sharing_settings;
 use function PublicCollaboration\is_collaborator;
 use function PublicCollaboration\filter_post_lock_meta;
 use function PublicCollaboration\filter_show_post_locked_dialog;
+use function PublicCollaboration\filter_sync_rooms;
+use function PublicCollaboration\filter_touch_on_write;
 use function PublicCollaboration\restrict_admin_access;
 use function PublicCollaboration\unhook_post_lock_heartbeat;
 
@@ -608,6 +610,328 @@ class Test_Functions extends WP_UnitTestCase {
 			$printed,
 			'How long a link lasts is filterable, so the panel is told rather than left to repeat the default.'
 		);
+	}
+
+	/**
+	 * Asks the guard what it would do with a room, as the given user.
+	 *
+	 * @param string   $route   Sync route being requested.
+	 * @param array    $params  Parameters carrying the rooms.
+	 * @param int      $user_id Who is asking.
+	 * @return mixed Whatever the filter would hand back to the REST server.
+	 *
+	 * @phpstan-param array<string, mixed> $params
+	 */
+	private function ask_for_room( string $route, array $params, int $user_id ) {
+		wp_set_current_user( $user_id );
+
+		$request = new WP_REST_Request( 'POST', $route );
+
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		return filter_sync_rooms( null, rest_get_server(), $request );
+	}
+
+	/**
+	 * The room for the shared post is the whole point, and has to work.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_may_join_the_room_for_their_own_post(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/save',
+				[ 'room' => 'postType/post:' . self::$post_id ],
+				$user_id
+			)
+		);
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/updates',
+				[
+					'rooms' => [
+						[
+							'client_id' => 'abc',
+							'room'      => 'postType/post:' . self::$post_id,
+						],
+					],
+				],
+				$user_id
+			)
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_join_another_posts_room(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$result = $this->ask_for_room(
+			'/wp-sync/v1/save',
+			[ 'room' => 'postType/post:' . $other_id ],
+			$user_id
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'public_collaboration_forbidden_room', $result->get_error_code() );
+	}
+
+	/**
+	 * The gap this guard exists for: a room naming no object is checked against
+	 * bare `edit_posts`, which every collaborator holds for the editor's sake.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_join_a_room_that_names_no_post(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/save', [ 'room' => 'postType/post' ], $user_id )
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_slip_a_room_in_beside_their_own(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$this->assertWPError(
+			$this->ask_for_room(
+				'/wp-sync/v1/updates',
+				[
+					'rooms' => [
+						[
+							'client_id' => 'abc',
+							'room'      => 'postType/post:' . self::$post_id,
+						],
+						[
+							'client_id' => 'def',
+							'room'      => 'postType/post:' . $other_id,
+						],
+					],
+				],
+				$user_id
+			),
+			'One room of their own does not carry the rest of the request.'
+		);
+	}
+
+	/**
+	 * A request with nothing to check is not a request to wave through.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_collaborator_cannot_ask_for_a_room_this_does_not_recognise(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/updates', [ 'rooms' => [ 'postType/post' ] ], $user_id )
+		);
+		$this->assertWPError(
+			$this->ask_for_room( '/wp-sync/v1/updates', [ 'rooms' => [ [ 'client_id' => 'abc' ] ] ], $user_id )
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_everybody_else_syncs_whatever_they_like(): void {
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$this->assertNull(
+			$this->ask_for_room(
+				'/wp-sync/v1/save',
+				[ 'room' => 'postType/post:' . $other_id ],
+				self::$admin_id
+			),
+			'Whose rooms an ordinary account may join is Gutenberg\'s own business.'
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_other_routes_are_left_alone(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$this->assertNull(
+			$this->ask_for_room( '/wp/v2/posts', [ 'room' => 'postType/post:999999' ], $user_id )
+		);
+	}
+
+	/**
+	 * Puts a request through the activity filter, as the given user.
+	 *
+	 * @param string $method  Request method.
+	 * @param string $route   Route being requested.
+	 * @param array  $params  Parameters the request carries.
+	 * @param int    $user_id Who is asking.
+	 * @return void
+	 *
+	 * @phpstan-param array<string, mixed> $params
+	 */
+	private function make_request( string $method, string $route, array $params, int $user_id ): void {
+		wp_set_current_user( $user_id );
+
+		$request = new WP_REST_Request( $method, $route );
+
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		filter_touch_on_write( new \WP_REST_Response( [], 200 ), [], $request );
+	}
+
+	/**
+	 * Puts a request a minute behind, so that the next one is worth a write.
+	 *
+	 * @param Collaboration_Request $request The request to age.
+	 * @return void
+	 */
+	private function make_idle( Collaboration_Request $request ): void {
+		update_post_meta(
+			$request->get_post()->ID,
+			Collaboration_Request::META_LAST_ACTIVE_AT,
+			time() - 2 * MINUTE_IN_SECONDS
+		);
+		update_post_meta(
+			$request->get_post()->ID,
+			Collaboration_Request::META_EXPIRES_AT,
+			time() + 13 * MINUTE_IN_SECONDS
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_touch_on_write
+	 */
+	public function test_a_change_puts_the_expiry_back(): void {
+		[ $request, $user_id ] = $this->create_collaborator();
+
+		$this->make_idle( $request );
+
+		$this->make_request( 'POST', '/wp/v2/posts/' . self::$post_id, [], $user_id );
+
+		$this->assertEqualsWithDelta(
+			time() + Collaboration_Request::DEFAULT_TTL,
+			$request->get_expires_at(),
+			2
+		);
+	}
+
+	/**
+	 * The editor talks to the server for as long as it is open, and a link that
+	 * outlives an abandoned browser is not a link that expires.
+	 *
+	 * @covers \PublicCollaboration\filter_touch_on_write
+	 */
+	public function test_reading_is_not_working(): void {
+		[ $request, $user_id ] = $this->create_collaborator();
+
+		$this->make_idle( $request );
+
+		$expires_at = $request->get_expires_at();
+
+		$this->make_request( 'GET', '/wp/v2/posts/' . self::$post_id, [], $user_id );
+
+		$this->assertSame( $expires_at, $request->get_expires_at() );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_touch_on_write
+	 * @covers \PublicCollaboration\carries_changes
+	 */
+	public function test_a_sync_poll_carrying_nothing_is_not_working_either(): void {
+		[ $request, $user_id ] = $this->create_collaborator();
+
+		$this->make_idle( $request );
+
+		$expires_at = $request->get_expires_at();
+		$room       = 'postType/post:' . self::$post_id;
+
+		$this->make_request(
+			'POST',
+			'/wp-sync/v1/updates',
+			[
+				'rooms' => [
+					[
+						'client_id' => 'abc',
+						'room'      => $room,
+						'updates'   => [],
+					],
+				],
+			],
+			$user_id
+		);
+
+		$this->assertSame( $expires_at, $request->get_expires_at(), 'Asking is not changing.' );
+
+		$this->make_request(
+			'POST',
+			'/wp-sync/v1/updates',
+			[
+				'rooms' => [
+					[
+						'client_id' => 'abc',
+						'room'      => $room,
+						'updates'   => [ [ 'update' => 'something' ] ],
+					],
+				],
+			],
+			$user_id
+		);
+
+		$this->assertGreaterThan(
+			$expires_at,
+			$request->get_expires_at(),
+			'Somebody typing is.'
+		);
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_touch_on_write
+	 */
+	public function test_a_refused_change_does_not_count(): void {
+		[ $request, $user_id ] = $this->create_collaborator();
+
+		$this->make_idle( $request );
+
+		$expires_at = $request->get_expires_at();
+
+		wp_set_current_user( $user_id );
+
+		filter_touch_on_write(
+			new \WP_Error( 'rest_cannot_edit', 'No.', [ 'status' => 403 ] ),
+			[],
+			new WP_REST_Request( 'POST', '/wp/v2/posts/' . self::$post_id )
+		);
+
+		$this->assertSame( $expires_at, $request->get_expires_at() );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_touch_on_write
+	 */
+	public function test_everybody_else_keeps_no_link_alive(): void {
+		[ $request ] = $this->create_collaborator();
+
+		$this->make_idle( $request );
+
+		$expires_at = $request->get_expires_at();
+
+		$this->make_request( 'POST', '/wp/v2/posts/' . self::$post_id, [], self::$admin_id );
+
+		$this->assertSame( $expires_at, $request->get_expires_at() );
 	}
 
 	/**
