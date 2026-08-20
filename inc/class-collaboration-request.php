@@ -282,6 +282,7 @@ final class Collaboration_Request {
 				'post_parent'            => $post_id,
 				'post_type'              => self::POST_TYPE,
 				'post_status'            => 'publish',
+
 				/*
 				 * Expiry is asked of the database rather than sorted out
 				 * afterwards, and there is no ceiling on top of it. Cleanup
