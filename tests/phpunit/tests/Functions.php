@@ -254,7 +254,7 @@ class Test_Functions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Unticking a box takes effect on the page the collaborator is already looking at.
+	 * Turning a switch off takes effect on the page the collaborator is already looking at.
 	 *
 	 * @covers \PublicCollaboration\filter_user_has_cap
 	 */
@@ -552,15 +552,31 @@ class Test_Functions extends WP_UnitTestCase {
 
 	/**
 	 * @covers \PublicCollaboration\enqueue_block_editor_assets
+	 * @covers \PublicCollaboration\get_sharing_settings
 	 */
 	public function test_whoever_shared_the_post_is_given_the_sharing_bundle(): void {
 		$this->reset_scripts();
 		wp_set_current_user( self::$admin_id );
 
+		add_filter( 'public_collaboration_request_ttl', static fn (): int => 5 * MINUTE_IN_SECONDS );
+
 		enqueue_block_editor_assets();
 
 		$this->assertTrue( wp_script_is( 'public-collaboration-editor', 'enqueued' ) );
 		$this->assertFalse( wp_script_is( 'public-collaboration-welcome', 'enqueued' ) );
+
+		$before = wp_scripts()->get_data( 'public-collaboration-editor', 'before' );
+
+		$this->assertIsArray( $before );
+
+		$printed = implode( "\n", array_filter( $before, 'is_string' ) );
+
+		$this->assertStringContainsString( 'window.publicCollaborationSettings =', $printed );
+		$this->assertStringContainsString(
+			'"ttl":300',
+			$printed,
+			'How long a link lasts is filterable, so the panel is told rather than left to repeat the default.'
+		);
 	}
 
 	/**

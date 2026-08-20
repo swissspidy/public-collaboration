@@ -247,6 +247,67 @@ final class Collaboration_Request {
 	}
 
 	/**
+	 * Returns the collaboration requests for a given post that are still usable.
+	 *
+	 * Expired requests are left out, on the same reasoning as
+	 * {@see Collaboration_Request::get_by_token()}: cleanup runs on cron, which
+	 * is unreliable on low-traffic sites, so a link nobody may follow any more
+	 * has no business being listed as one somebody could.
+	 *
+	 * @param int $post_id ID of the post being collaborated on.
+	 * @return Collaboration_Request[] Collaboration requests, oldest first.
+	 */
+	public static function get_for_post( int $post_id ): array {
+		if ( $post_id <= 0 ) {
+			return [];
+		}
+
+		$posts = get_posts(
+			[
+				'post_parent'            => $post_id,
+				'post_type'              => self::POST_TYPE,
+				'post_status'            => 'publish',
+
+				/*
+				 * Expiry is asked of the database rather than sorted out
+				 * afterwards, and there is no ceiling on top of it. Cleanup
+				 * runs on cron, so a post that has been shared all week can
+				 * hold any number of spent requests — and the oldest hundred
+				 * rows would be all of them, hiding every live link behind the
+				 * dead ones. What comes back is bounded by the quarter of an
+				 * hour each one lasts, not by a number picked here.
+				 */
+				'numberposts'            => -1,
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => self::META_EXPIRES_AT,
+						'value'   => time(),
+						'compare' => '>',
+						'type'    => 'NUMERIC',
+					],
+				],
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'suppress_filters'       => false,
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		$requests = [];
+
+		foreach ( $posts as $post ) {
+			$request = new self( $post );
+
+			if ( ! $request->is_expired() ) {
+				$requests[] = $request;
+			}
+		}
+
+		return $requests;
+	}
+
+	/**
 	 * Returns the collaboration request for a given post, regardless of whether it has expired.
 	 *
 	 * @param WP_Post $post The collaboration request post.

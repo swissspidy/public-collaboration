@@ -28,8 +28,8 @@ test.describe( 'On a network', () => {
 		const url = await collaboration.shareLink();
 
 		/*
-		 * A second tab rather than this one: revoking is done from the dialog
-		 * the editor is still showing, and navigating away would close it.
+		 * A second tab rather than this one: revoking is done from the panel in
+		 * the editor, and this needs the network's list of users as well.
 		 */
 		const network = await page.context().newPage();
 
@@ -70,11 +70,17 @@ test.describe( 'On a network', () => {
 
 		await collaboration
 			.getDialog()
-			.getByRole( 'button', { name: 'Revoke link' } )
+			.getByRole( 'button', { name: 'Done' } )
 			.click();
 
-		// Revoking does not wait for the server before closing the dialog, so
-		// this asks again rather than asserting on a single load.
+		await collaboration
+			.getLinks()
+			.first()
+			.getByRole( 'button', { name: /^Revoke (the )?link/ } )
+			.click();
+
+		// The account is deleted while the request is in flight, so this asks
+		// again rather than asserting on a single load.
 		await expect
 			.poll( collaborators, { timeout: 15_000 } )
 			.not.toContain( collaborator );

@@ -16,6 +16,7 @@ import { store as preferencesStore } from '@wordpress/preferences';
 /**
  * Internal dependencies
  */
+import { getTimeLeft } from '../expiry';
 import './welcome.css';
 
 const PREFERENCE_SCOPE = 'public-collaboration';
@@ -123,9 +124,13 @@ export function WelcomeModal() {
 					</li>
 				) }
 				<li>
-					{ __(
-						'Your access lasts 15 minutes, and the temporary account it uses is deleted afterwards.',
-						'public-collaboration'
+					{ sprintf(
+						/* translators: %s: Time left, e.g. "12 minutes". */
+						__(
+							'Your access ends in %s, and the temporary account it uses is deleted afterwards.',
+							'public-collaboration'
+						),
+						getTimeLeft( data.expiresAt )
 					) }
 				</li>
 			</ul>

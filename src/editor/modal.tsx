@@ -8,10 +8,12 @@ import { QRCodeSVG } from 'qrcode.react';
  */
 import {
 	Button,
-	CheckboxControl,
 	Modal,
 	TextControl,
+	ToggleControl,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalText as Text, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { useCopyToClipboard } from '@wordpress/compose';
 import { useDispatch } from '@wordpress/data';
@@ -22,54 +24,71 @@ import { copy } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
+import { getTimeLeft } from '../expiry';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 import './editor.css';
 
 const CAPABILITY_OPTIONS: Array< {
 	value: CollaborationCapability;
 	label: string;
+	help: string;
 } > = [
 	{
 		value: 'edit',
 		label: __( 'Edit post content', 'public-collaboration' ),
+		help: __(
+			'Change the text and blocks in this post. Nothing else on the site.',
+			'public-collaboration'
+		),
 	},
 	{
 		value: 'upload',
 		label: __( 'Upload media files', 'public-collaboration' ),
+		help: __(
+			'Add images and other files to the media library.',
+			'public-collaboration'
+		),
 	},
 ];
 
 interface CollaborationModalProps {
 	/** The collaboration request being shown. */
 	request: CollaborationRequest;
-	/** What the collaborator is currently allowed to do. */
-	capabilities: CollaborationCapability[];
-	/** Called when a capability is ticked or unticked. */
+	/** Whether the link was just minted, and so can still be called off. */
+	isNew: boolean;
+	/** Whether the link is being revoked right now. */
+	isRevoking: boolean;
+	/** Called when a capability is switched on or off. */
 	onToggleCapability: (
 		capability: CollaborationCapability,
 		enabled: boolean
 	) => void;
-	/** Whether the link is being revoked right now. */
-	isRevoking: boolean;
-	/** Called when the person closes the dialog. */
+	/** Called when the person takes the link back. */
+	onRevoke: () => void;
+	/** Called when the person is done with the dialog. */
 	onRequestClose: () => void;
 }
 
 /**
- * Shows the QR code and link for a collaboration request.
+ * Shows the QR code, the link, and what it grants.
+ *
+ * Closing the dialog leaves the link working: it is listed in the panel this
+ * was opened from, which is where it can be changed or taken back later.
  *
  * @param props                    Component props.
  * @param props.request            The collaboration request being shown.
- * @param props.capabilities       What the collaborator is currently allowed to do.
- * @param props.onToggleCapability Called when a capability is ticked or unticked.
+ * @param props.isNew              Whether the link was just minted, and so can still be called off.
  * @param props.isRevoking         Whether the link is being revoked right now.
- * @param props.onRequestClose     Called when the person closes the dialog.
+ * @param props.onToggleCapability Called when a capability is switched on or off.
+ * @param props.onRevoke           Called when the person takes the link back.
+ * @param props.onRequestClose     Called when the person is done with the dialog.
  */
 export function CollaborationModal( {
 	request,
-	capabilities,
-	onToggleCapability,
+	isNew,
 	isRevoking,
+	onToggleCapability,
+	onRevoke,
 	onRequestClose,
 }: CollaborationModalProps ) {
 	const { createNotice } = useDispatch( noticesStore );
@@ -140,17 +159,22 @@ export function CollaborationModal( {
 					</Text>
 				</legend>
 
-				{ CAPABILITY_OPTIONS.map( ( option ) => (
-					<CheckboxControl
-						key={ option.value }
-						__nextHasNoMarginBottom
-						label={ option.label }
-						checked={ capabilities.includes( option.value ) }
-						onChange={ ( checked ) =>
-							onToggleCapability( option.value, checked )
-						}
-					/>
-				) ) }
+				<VStack spacing={ 4 }>
+					{ CAPABILITY_OPTIONS.map( ( option ) => (
+						<ToggleControl
+							key={ option.value }
+							__nextHasNoMarginBottom
+							label={ option.label }
+							help={ option.help }
+							checked={ request.capabilities.includes(
+								option.value
+							) }
+							onChange={ ( checked ) =>
+								onToggleCapability( option.value, checked )
+							}
+						/>
+					) ) }
+				</VStack>
 			</fieldset>
 
 			<p className="public-collaboration-modal__status">
@@ -165,24 +189,49 @@ export function CollaborationModal( {
 								request.collaborator
 						  )
 						: __(
-								'Nobody has opened the link yet. It stops working 15 minutes after it was created.',
+								'Nobody has opened the link yet.',
 								'public-collaboration'
-						  ) }
+						  ) }{ ' ' }
+					{ sprintf(
+						/* translators: %s: Time left, e.g. "12 minutes". */
+						__( 'It stops working in %s.', 'public-collaboration' ),
+						getTimeLeft( request.expires_at )
+					) }
 				</Text>
 			</p>
 
-			<div className="public-collaboration-modal__actions">
+			<HStack justify="flex-end">
+				{ /*
+				 * The same thing either way, under the name that fits what has
+				 * happened to the link so far. Calling off one that has only
+				 * just been minted is undoing a click; revoking one that has
+				 * been handed out takes it away from somebody, which is worth
+				 * both the longer word and the colour that goes with it.
+				 */ }
 				<Button
 					__next40pxDefaultSize
 					variant="tertiary"
-					onClick={ onRequestClose }
+					isDestructive={ ! isNew }
+					onClick={ onRevoke }
 					isBusy={ isRevoking }
 					disabled={ isRevoking }
 					accessibleWhenDisabled
 				>
-					{ __( 'Revoke link', 'public-collaboration' ) }
+					{ isNew
+						? __( 'Cancel', 'public-collaboration' )
+						: __( 'Revoke link', 'public-collaboration' ) }
 				</Button>
-			</div>
+
+				<Button
+					__next40pxDefaultSize
+					variant="primary"
+					onClick={ onRequestClose }
+					disabled={ isRevoking }
+					accessibleWhenDisabled
+				>
+					{ __( 'Done', 'public-collaboration' ) }
+				</Button>
+			</HStack>
 		</Modal>
 	);
 }

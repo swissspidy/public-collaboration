@@ -192,6 +192,74 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	}
 
 	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_finds_every_live_request_for_a_post(): void {
+		$first  = $this->create_request();
+		$second = $this->create_request();
+
+		$this->assertSame(
+			[ $first->get_token(), $second->get_token() ],
+			array_map(
+				static fn ( Collaboration_Request $request ): string => $request->get_token(),
+				Collaboration_Request::get_for_post( self::$post_id )
+			),
+			'Oldest first, so the panel does not reshuffle as links are handed out.'
+		);
+	}
+
+	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_treats_an_expired_request_as_gone(): void {
+		$request = $this->create_request();
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+
+		$this->assertSame( [], Collaboration_Request::get_for_post( self::$post_id ) );
+	}
+
+	/**
+	 * Cleanup runs on cron, which is unreliable on a low-traffic site, so a post
+	 * that has been shared all week can hold any number of spent requests. The
+	 * live ones must not end up behind them.
+	 *
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_is_not_crowded_out_by_spent_requests(): void {
+		// A hundred of them, because a hundred rows is what the ceiling this
+		// replaced would have read: with any fewer, the live link would still
+		// come back from the implementation this is here to rule out.
+		for ( $i = 0; $i < 100; $i++ ) {
+			$spent = $this->create_request();
+
+			update_post_meta( $spent->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+		}
+
+		$live = $this->create_request();
+
+		$this->assertSame(
+			[ $live->get_token() ],
+			array_map(
+				static fn ( Collaboration_Request $request ): string => $request->get_token(),
+				Collaboration_Request::get_for_post( self::$post_id )
+			)
+		);
+	}
+
+	/**
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_has_nothing_for_a_post_that_does_not_exist(): void {
+		$this->assertSame( [], Collaboration_Request::get_for_post( 0 ) );
+		$this->assertSame( [], Collaboration_Request::get_for_post( -1 ) );
+
+		// An ID of the right shape for a post, belonging to none: the guard at
+		// the top says nothing about this one, so it is the query answering.
+		$this->assertSame( [], Collaboration_Request::get_for_post( 999999 ) );
+	}
+
+	/**
 	 * @covers ::from_post
 	 */
 	public function test_from_post_only_accepts_collaboration_requests(): void {

@@ -17,3 +17,21 @@ export interface CollaborationRequest {
 	/** Display name of the collaborator, once they have joined. */
 	collaborator: string | null;
 }
+
+/** What the sharing panel is told about the links it hands out. */
+export interface SharingSettings {
+	/** How long a collaboration link stays valid, in seconds. */
+	ttl: number;
+}
+
+declare global {
+	interface Window {
+		/**
+		 * Printed with the editor page for whoever may share the post.
+		 *
+		 * Absent for a collaborator, who gets {@link Window.publicCollaboration}
+		 * and the greeting that reads it instead.
+		 */
+		publicCollaborationSettings?: SharingSettings;
+	}
+}
