@@ -440,8 +440,6 @@ final class Collaboration_Request {
 	 * The account is made on first use rather than up front: a link that nobody
 	 * follows should not leave a user row behind.
 	 *
-	 * @global \wpdb $wpdb WordPress database abstraction object.
-	 *
 	 * @return int|WP_Error User ID on success, error object on failure.
 	 */
 	public function get_or_create_user() {
@@ -511,15 +509,14 @@ final class Collaboration_Request {
 		 * the greeting that explains why they are here at all — two dialogs at
 		 * once, each hiding the other from screen readers. This is the same
 		 * store the editor writes preferences back to, seeded before they
-		 * arrive. The key carries the blog prefix so that each site in a
+		 * arrive. update_user_option() rather than update_user_meta(): it is
+		 * the one that puts the blog prefix on the key, so that each site in a
 		 * network keeps its own preferences; see
 		 * wp_register_persisted_preferences_meta().
 		 */
-		global $wpdb;
-
-		update_user_meta(
+		update_user_option(
 			$user_id,
-			$wpdb->get_blog_prefix() . 'persisted_preferences',
+			'persisted_preferences',
 			[
 				'core/edit-post' => [
 					'welcomeGuide' => false,
