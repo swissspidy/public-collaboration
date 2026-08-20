@@ -32,11 +32,21 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	/**
+	 * Namespace these routes are registered under.
+	 */
+	private const REST_NAMESPACE = 'public-collaboration/v1';
+
+	/**
+	 * Base of the collaboration request routes.
+	 */
+	private const REST_BASE = 'collaboration-requests';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->namespace = 'public-collaboration/v1';
-		$this->rest_base = 'collaboration-requests';
+		$this->namespace = self::REST_NAMESPACE;
+		$this->rest_base = self::REST_BASE;
 	}
 
 	/**
@@ -46,8 +56,8 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 */
 	public function register_routes(): void {
 		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base,
+			self::REST_NAMESPACE,
+			'/' . self::REST_BASE,
 			[
 				[
 					'methods'             => WP_REST_Server::CREATABLE,
@@ -76,8 +86,8 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 		);
 
 		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/(?P<token>[a-f0-9]{32})',
+			self::REST_NAMESPACE,
+			'/' . self::REST_BASE . '/(?P<token>[a-f0-9]{32})',
 			[
 				'args'   => [
 					'token' => [
@@ -123,7 +133,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function create_item_permissions_check( $request ) {
-		$post_id = (int) $request['post'];
+		$post_id = $this->get_post_id( $request );
 		$post    = get_post( $post_id );
 
 		if ( ! $post instanceof WP_Post ) {
@@ -142,7 +152,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			);
 		}
 
-		return $this->check_capabilities( (array) $request['capabilities'] );
+		return $this->check_capabilities( $this->get_capabilities( $request ) );
 	}
 
 	/**
@@ -154,8 +164,8 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	public function create_item( $request ) {
 		$collaboration_request = Collaboration_Request::create(
 			[
-				'post'         => (int) $request['post'],
-				'capabilities' => (array) $request['capabilities'],
+				'post'         => $this->get_post_id( $request ),
+				'capabilities' => $this->get_capabilities( $request ),
 			]
 		);
 
@@ -176,7 +186,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function get_item_permissions_check( $request ) {
-		return $this->check_owner_permission( (string) $request['token'] );
+		return $this->check_owner_permission( $this->get_token( $request ) );
 	}
 
 	/**
@@ -186,7 +196,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error Response object on success, error object on failure.
 	 */
 	public function get_item( $request ) {
-		$collaboration_request = Collaboration_Request::get_by_token( (string) $request['token'] );
+		$collaboration_request = Collaboration_Request::get_by_token( $this->get_token( $request ) );
 
 		if ( ! $collaboration_request instanceof Collaboration_Request ) {
 			return $this->not_found_error();
@@ -202,13 +212,13 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function update_item_permissions_check( $request ) {
-		$permission = $this->check_owner_permission( (string) $request['token'] );
+		$permission = $this->check_owner_permission( $this->get_token( $request ) );
 
 		if ( is_wp_error( $permission ) ) {
 			return $permission;
 		}
 
-		return $this->check_capabilities( (array) $request['capabilities'] );
+		return $this->check_capabilities( $this->get_capabilities( $request ) );
 	}
 
 	/**
@@ -221,13 +231,13 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error Response object on success, error object on failure.
 	 */
 	public function update_item( $request ) {
-		$collaboration_request = Collaboration_Request::get_by_token( (string) $request['token'] );
+		$collaboration_request = Collaboration_Request::get_by_token( $this->get_token( $request ) );
 
 		if ( ! $collaboration_request instanceof Collaboration_Request ) {
 			return $this->not_found_error();
 		}
 
-		$collaboration_request->set_capabilities( (array) $request['capabilities'] );
+		$collaboration_request->set_capabilities( $this->get_capabilities( $request ) );
 
 		return $this->prepare_item_for_response( $collaboration_request, $request );
 	}
@@ -239,7 +249,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function delete_item_permissions_check( $request ) {
-		return $this->check_owner_permission( (string) $request['token'] );
+		return $this->check_owner_permission( $this->get_token( $request ) );
 	}
 
 	/**
@@ -249,7 +259,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error Response object on success, error object on failure.
 	 */
 	public function delete_item( $request ) {
-		$collaboration_request = Collaboration_Request::get_by_token( (string) $request['token'] );
+		$collaboration_request = Collaboration_Request::get_by_token( $this->get_token( $request ) );
 
 		if ( ! $collaboration_request instanceof Collaboration_Request ) {
 			return $this->not_found_error();
@@ -265,6 +275,54 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 				'previous' => $previous,
 			]
 		);
+	}
+
+	/**
+	 * Reads the post ID off a request.
+	 *
+	 * Request parameters arrive as whatever was sent; the schema is what narrows
+	 * them, and these three readers are where that narrowing is spelled out for
+	 * the rest of the class.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return int Post ID, or 0 if the parameter was not a number.
+	 */
+	private function get_post_id( WP_REST_Request $request ): int {
+		$post_id = $request['post'];
+
+		return is_numeric( $post_id ) ? (int) $post_id : 0;
+	}
+
+	/**
+	 * Reads the collaboration request token off a request.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return string The token, or an empty string if the parameter was not one.
+	 */
+	private function get_token( WP_REST_Request $request ): string {
+		$token = $request['token'];
+
+		return is_string( $token ) ? $token : '';
+	}
+
+	/**
+	 * Reads the requested capabilities off a request.
+	 *
+	 * Anything that is not a string is dropped rather than coerced: the names
+	 * this plugin knows are all strings, so a value of any other shape can only
+	 * be something it was never going to grant.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return string[] Requested capabilities.
+	 */
+	private function get_capabilities( WP_REST_Request $request ): array {
+		$capabilities = $request['capabilities'];
+
+		if ( ! is_array( $capabilities ) ) {
+			return [];
+		}
+
+		return array_values( array_filter( $capabilities, 'is_string' ) );
 	}
 
 	/**

@@ -363,7 +363,11 @@ final class Collaboration_Request {
 	 * @return int Unix timestamp.
 	 */
 	public function get_expires_at(): int {
-		return (int) get_post_meta( $this->post->ID, self::META_EXPIRES_AT, true );
+		$expires_at = get_post_meta( $this->post->ID, self::META_EXPIRES_AT, true );
+
+		// A missing or unreadable expiry is treated as having passed: this is the
+		// one value that decides whether a token still works.
+		return is_numeric( $expires_at ) ? (int) $expires_at : 0;
 	}
 
 	/**
@@ -388,7 +392,7 @@ final class Collaboration_Request {
 		}
 
 		return array_values(
-			array_intersect( array_map( 'strval', $capabilities ), self::get_available_capabilities() )
+			array_intersect( array_filter( $capabilities, 'is_string' ), self::get_available_capabilities() )
 		);
 	}
 
@@ -398,6 +402,11 @@ final class Collaboration_Request {
 	 * Anything not on the list of available capabilities is dropped, so that the
 	 * stored value can never grow beyond what this plugin knows how to grant.
 	 *
+	 * Non-strings are dropped first, on the same reasoning as {@see get_capabilities()}.
+	 * array_intersect() compares its arguments as strings but returns the values
+	 * it was given, so without this a value that merely casts to a capability
+	 * name would be written back as-is.
+	 *
 	 * @param string[] $capabilities Capability names.
 	 * @return void
 	 */
@@ -405,7 +414,9 @@ final class Collaboration_Request {
 		update_post_meta(
 			$this->post->ID,
 			self::META_CAPABILITIES,
-			array_values( array_intersect( array_map( 'strval', $capabilities ), self::get_available_capabilities() ) )
+			array_values(
+				array_intersect( array_filter( $capabilities, 'is_string' ), self::get_available_capabilities() )
+			)
 		);
 	}
 
@@ -425,7 +436,9 @@ final class Collaboration_Request {
 	 * @return int User ID, or 0 if no user has been created yet.
 	 */
 	public function get_user_id(): int {
-		return (int) get_post_meta( $this->post->ID, self::META_USER_ID, true );
+		$user_id = get_post_meta( $this->post->ID, self::META_USER_ID, true );
+
+		return is_numeric( $user_id ) ? (int) $user_id : 0;
 	}
 
 	/**
@@ -433,8 +446,6 @@ final class Collaboration_Request {
 	 *
 	 * The account is made on first use rather than up front: a link that nobody
 	 * follows should not leave a user row behind.
-	 *
-	 * @global \wpdb $wpdb WordPress database abstraction object.
 	 *
 	 * @return int|WP_Error User ID on success, error object on failure.
 	 */
@@ -505,15 +516,14 @@ final class Collaboration_Request {
 		 * the greeting that explains why they are here at all — two dialogs at
 		 * once, each hiding the other from screen readers. This is the same
 		 * store the editor writes preferences back to, seeded before they
-		 * arrive. The key carries the blog prefix so that each site in a
+		 * arrive. update_user_option() rather than update_user_meta(): it is
+		 * the one that puts the blog prefix on the key, so that each site in a
 		 * network keeps its own preferences; see
 		 * wp_register_persisted_preferences_meta().
 		 */
-		global $wpdb;
-
-		update_user_meta(
+		update_user_option(
 			$user_id,
-			$wpdb->get_blog_prefix() . 'persisted_preferences',
+			'persisted_preferences',
 			[
 				'core/edit-post' => [
 					'welcomeGuide' => false,

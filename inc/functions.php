@@ -239,7 +239,9 @@ function filter_template_include( string $template ): string {
 	 * otherwise counting upwards from 1 would find every live collaboration
 	 * request.
 	 */
-	if ( ! $post instanceof WP_Post || (string) get_query_var( 'name' ) !== $post->post_name ) {
+	$name = get_query_var( 'name' );
+
+	if ( ! $post instanceof WP_Post || ! is_string( $name ) || $name !== $post->post_name ) {
 		global $wp_query;
 
 		if ( $wp_query instanceof WP_Query ) {
@@ -380,8 +382,16 @@ function filter_user_has_cap( array $allcaps, array $caps, array $args, $user ):
 	 * What it would otherwise allow is creating posts, and the two ways to do
 	 * that are closed off in filter_rest_pre_insert() and
 	 * restrict_admin_access().
+	 *
+	 * Capability names live on a plain object built by
+	 * get_post_type_capabilities(), so this one is read rather than assumed:
+	 * a name that is not a string is not a capability anybody can be granted.
 	 */
-	$allcaps[ $post_type->cap->edit_posts ] = true;
+	$edit_posts = $post_type->cap->edit_posts;
+
+	if ( \is_string( $edit_posts ) ) {
+		$allcaps[ $edit_posts ] = true;
+	}
 
 	if ( $request->allows( Collaboration_Request::CAP_UPLOAD ) ) {
 		$allcaps['upload_files'] = true;
