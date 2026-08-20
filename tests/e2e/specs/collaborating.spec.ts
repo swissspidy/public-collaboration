@@ -89,10 +89,11 @@ test.describe( 'Following a collaboration link', () => {
 			.getByRole( 'checkbox', { name: 'Upload media files' } );
 
 		/*
-		 * The tick is optimistic — the request that takes the capability away
-		 * is still in flight. Following the link before it lands would greet
-		 * the collaborator with the capability they were not meant to have, and
-		 * the assertion below would pass only because the dialog rendered late.
+		 * The switch moves optimistically — the request that takes the
+		 * capability away is still in flight. Following the link before it
+		 * lands would greet the collaborator with the capability they were not
+		 * meant to have, and the assertion below would pass only because the
+		 * dialog rendered late.
 		 */
 		const saved = page.waitForResponse(
 			( response ) =>

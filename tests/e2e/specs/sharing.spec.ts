@@ -86,6 +86,31 @@ test.describe( 'Sharing a post', () => {
 		expect( ( await secondPage.goto( url ) )?.status() ).toBe( 200 );
 	} );
 
+	test( 'still lists the link after the editor is reloaded', async ( {
+		page,
+		collaboration,
+	} ) => {
+		await collaboration.shareLink();
+
+		await collaboration
+			.getDialog()
+			.getByRole( 'button', { name: 'Done' } )
+			.click();
+
+		await page.reload();
+		await collaboration.openPanel();
+
+		/*
+		 * The panel is built from what the server says is live rather than
+		 * from what this tab happens to have minted, which is the whole reason
+		 * a link handed out before a reload can still be taken back after one.
+		 */
+		const links = collaboration.getLinks();
+
+		await expect( links ).toHaveCount( 1 );
+		await expect( links.first() ).toContainText( 'Not opened yet' );
+	} );
+
 	test( 'takes back a link that has only just been minted', async ( {
 		page,
 		secondPage,

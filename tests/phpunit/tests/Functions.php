@@ -254,7 +254,7 @@ class Test_Functions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Unticking a box takes effect on the page the collaborator is already looking at.
+	 * Turning a switch off takes effect on the page the collaborator is already looking at.
 	 *
 	 * @covers \PublicCollaboration\filter_user_has_cap
 	 */

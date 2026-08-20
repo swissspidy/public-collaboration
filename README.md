@@ -34,7 +34,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 | Address | 32 hex characters from `random_bytes()` — not derived from the clock, not sequential |
 | Lifetime | 15 minutes, checked on every use rather than trusted to cron |
 | Scope | One post. Not the post list, not the media library, not the rest of wp-admin |
-| Powers | Whatever the sharer ticked: edit the post, upload media, or neither |
+| Powers | Whatever the sharer switched on: edit the post, upload media, or neither |
 | Ceiling | Never more than the sharer has themselves |
 | Afterwards | The link, and the account behind it, are deleted |
 
