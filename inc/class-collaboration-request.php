@@ -282,10 +282,24 @@ final class Collaboration_Request {
 				'post_parent'            => $post_id,
 				'post_type'              => self::POST_TYPE,
 				'post_status'            => 'publish',
-				// A ceiling rather than a page: every link expires within the
-				// quarter of an hour it was minted in, so a post cannot
-				// plausibly have this many live at once.
-				'numberposts'            => 100,
+				/*
+				 * Expiry is asked of the database rather than sorted out
+				 * afterwards, and there is no ceiling on top of it. Cleanup
+				 * runs on cron, so a post that has been shared all week can
+				 * hold any number of spent requests — and the oldest hundred
+				 * rows would be all of them, hiding every live link behind the
+				 * dead ones. What comes back is bounded by the quarter of an
+				 * hour each one lasts, not by a number picked here.
+				 */
+				'numberposts'            => -1,
+				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => self::META_EXPIRES_AT,
+						'value'   => time(),
+						'compare' => '>',
+						'type'    => 'NUMERIC',
+					],
+				],
 				'orderby'                => 'ID',
 				'order'                  => 'ASC',
 				'suppress_filters'       => false,

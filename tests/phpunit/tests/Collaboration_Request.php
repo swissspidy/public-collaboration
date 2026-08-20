@@ -238,6 +238,31 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Cleanup runs on cron, which is unreliable on a low-traffic site, so a post
+	 * that has been shared all week can hold any number of spent requests. The
+	 * live ones must not end up behind them.
+	 *
+	 * @covers ::get_for_post
+	 */
+	public function test_get_for_post_is_not_crowded_out_by_spent_requests(): void {
+		for ( $i = 0; $i < 3; $i++ ) {
+			$spent = $this->create_request();
+
+			update_post_meta( $spent->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+		}
+
+		$live = $this->create_request();
+
+		$this->assertSame(
+			[ $live->get_token() ],
+			array_map(
+				static fn ( Collaboration_Request $request ): string => $request->get_token(),
+				Collaboration_Request::get_for_post( self::$post_id )
+			)
+		);
+	}
+
+	/**
 	 * @covers ::get_for_post
 	 */
 	public function test_get_for_post_has_nothing_for_a_post_that_cannot_exist(): void {

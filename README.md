@@ -93,6 +93,8 @@ add_action(
 | `PUT /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Change what the link grants |
 | `DELETE /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Revoke a link |
 
+Somebody who is in the editor on a collaboration link themselves is refused every one of these, listing included. Being able to edit the post is what qualifies anybody else to manage its links, and a collaborator can edit the post — so that one exception is spelled out rather than left to follow from the rule.
+
 Changing what a link grants takes effect on the collaborator's very next request — nothing was ever copied onto their account, so there is nothing to revoke separately.
 
 ## Development

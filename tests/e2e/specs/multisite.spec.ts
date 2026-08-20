@@ -76,7 +76,7 @@ test.describe( 'On a network', () => {
 		await collaboration
 			.getLinks()
 			.first()
-			.getByRole( 'button', { name: 'Revoke link' } )
+			.getByRole( 'button', { name: /^Revoke (the )?link/ } )
 			.click();
 
 		// The account is deleted while the request is in flight, so this asks
