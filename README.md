@@ -32,7 +32,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 | | |
 |---|---|
 | Address | 32 hex characters from `random_bytes()` — not derived from the clock, not sequential |
-| Lifetime | 15 minutes, checked on every use rather than trusted to cron |
+| Lifetime | 15 minutes after the last change, up to 12 hours in all — checked on every use rather than trusted to cron |
 | Scope | One post. Not the post list, not the media library, not the rest of wp-admin |
 | Powers | Whatever the sharer switched on: edit the post, upload media, or neither |
 | Ceiling | Never more than the sharer has themselves |
@@ -41,6 +41,8 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 Unknown, expired, and inaccessible tokens all return the same 404, so the endpoint cannot be used to find out which tokens exist.
 
 Following a working link signs the visitor in as a temporary account and drops them straight into the editor for that one post. Revoking a link from the panel deletes it, and the account with it; otherwise it expires on its own.
+
+**Expiry slides forward as somebody works.** A quarter of an hour flat would take the link away mid-paragraph from the one person it was meant for, so the clock is counted from the last change rather than from the moment the link was minted — and reads do not count, since an editor left open talks to the server whether anybody is at the keyboard or not. Activity is recorded at most once a minute, and the whole thing stops at a ceiling of twelve hours, so a browser left open on a desk cannot hold a door open all week.
 
 ## Architecture notes
 
@@ -63,7 +65,8 @@ Following a working link signs the visitor in as a temporary account and drops t
 
 | Filter | Description |
 |---|---|
-| `public_collaboration_request_ttl` | How long a link stays valid, in seconds. Default 15 minutes, floor of 1 minute. |
+| `public_collaboration_request_ttl` | How long a link outlives the last change made through it, in seconds. Default 15 minutes, floor of 1 minute. |
+| `public_collaboration_request_max_lifetime` | The longest a link may live, however much is done through it, in seconds. Default 12 hours, never below the idle time. |
 | `public_collaboration_rewrite_slug` | URL prefix of the collaboration link. Default `collaborate`. |
 | `public_collaboration_template` | Absolute path to the template rendering the collaboration page. |
 

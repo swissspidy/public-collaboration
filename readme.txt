@@ -42,7 +42,7 @@ You can never share more than you have yourself — if you cannot upload media, 
 
 = Nothing is left behind =
 
-Each link lasts 15 minutes and has a random, unguessable address. When it expires, or when you revoke it, the link and the temporary account behind it are deleted. What your collaborator wrote stays in the post, credited and intact.
+Each link lasts 15 minutes after the last change made through it, up to twelve hours in all, and has a random, unguessable address. When it expires, or when you revoke it, the link and the temporary account behind it are deleted. What your collaborator wrote stays in the post, credited and intact.
 
 == Frequently Asked Questions ==
 
@@ -56,7 +56,7 @@ Yes — WordPress's usual "somebody else is editing this post" lock is stood dow
 
 = How long is a link valid? =
 
-15 minutes by default. Developers can change this with the `public_collaboration_request_ttl` filter.
+15 minutes after the last change somebody makes through it, so it does not run out from under whoever is using it. Merely having the editor open does not count — only changes do — and no link lives longer than twelve hours whatever happens. Developers can change both with the `public_collaboration_request_ttl` and `public_collaboration_request_max_lifetime` filters.
 
 = Can I take access away sooner? =
 

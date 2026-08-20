@@ -9,6 +9,7 @@ declare(strict_types = 1);
 
 namespace PublicCollaboration;
 
+use DateTimeImmutable;
 use WP_Error;
 use WP_Post;
 use WP_User;
@@ -43,6 +44,11 @@ final class Collaboration_Request {
 	public const META_EXPIRES_AT = 'pubcol_expires_at';
 
 	/**
+	 * Meta key holding the timestamp of the collaborator's last change.
+	 */
+	public const META_LAST_ACTIVE_AT = 'pubcol_last_active_at';
+
+	/**
 	 * Meta key holding the granted capabilities.
 	 */
 	public const META_CAPABILITIES = 'pubcol_capabilities';
@@ -68,9 +74,19 @@ final class Collaboration_Request {
 	public const CAP_UPLOAD = 'upload';
 
 	/**
-	 * Default lifetime of a collaboration request, in seconds.
+	 * Default idle time before a collaboration request expires, in seconds.
 	 */
 	public const DEFAULT_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Default ceiling on the whole life of a collaboration request, in seconds.
+	 */
+	public const DEFAULT_MAX_LIFETIME = 12 * HOUR_IN_SECONDS;
+
+	/**
+	 * How stale an expiry has to be before it is worth writing again, in seconds.
+	 */
+	private const TOUCH_INTERVAL = MINUTE_IN_SECONDS;
 
 	/**
 	 * The underlying post.
@@ -171,6 +187,7 @@ final class Collaboration_Request {
 		$request = new self( $post );
 
 		update_post_meta( $post_id, self::META_EXPIRES_AT, time() + self::get_ttl() );
+		update_post_meta( $post_id, self::META_LAST_ACTIVE_AT, time() );
 		$request->set_capabilities( $args['capabilities'] ?? self::get_available_capabilities() );
 
 		/**
@@ -359,22 +376,45 @@ final class Collaboration_Request {
 	}
 
 	/**
-	 * Returns the lifetime of a collaboration request, in seconds.
+	 * Returns how long a collaboration request outlives its last change, in seconds.
 	 *
-	 * @return int Lifetime in seconds.
+	 * @return int Idle time in seconds.
 	 */
 	public static function get_ttl(): int {
 		/**
-		 * Filters how long a collaboration request stays valid.
+		 * Filters how long a collaboration request outlives its last change.
 		 *
 		 * Keep this short. The token is the only thing standing between the
 		 * public and write access to a post on your site.
 		 *
-		 * @param int $ttl Lifetime in seconds. Default 15 minutes.
+		 * @param int $ttl Idle time in seconds. Default 15 minutes.
 		 */
 		$ttl = (int) apply_filters( 'public_collaboration_request_ttl', self::DEFAULT_TTL );
 
 		return max( MINUTE_IN_SECONDS, $ttl );
+	}
+
+	/**
+	 * Returns the longest a collaboration request may live, in seconds.
+	 *
+	 * Expiry slides forward as somebody works, which without a ceiling would
+	 * mean a link that never ends — a browser left open on a desk, or a script
+	 * making one small change an hour, would keep it alive indefinitely. This is
+	 * what that eventually runs into, counted from when the link was minted.
+	 *
+	 * @return int Maximum lifetime in seconds.
+	 */
+	public static function get_max_lifetime(): int {
+		/**
+		 * Filters the longest a collaboration request may live.
+		 *
+		 * @param int $max_lifetime Maximum lifetime in seconds. Default 12 hours.
+		 */
+		$max_lifetime = (int) apply_filters( 'public_collaboration_request_max_lifetime', self::DEFAULT_MAX_LIFETIME );
+
+		// A ceiling below the idle time is not a shorter link, it is a link
+		// that expires before anybody could have used it.
+		return max( self::get_ttl(), $max_lifetime );
 	}
 
 	/**
@@ -453,6 +493,72 @@ final class Collaboration_Request {
 	 */
 	public function is_expired(): bool {
 		return $this->get_expires_at() <= time();
+	}
+
+	/**
+	 * Returns the timestamp of the collaborator's last change.
+	 *
+	 * @return int Unix timestamp, or the moment the request was made if nothing has been changed since.
+	 */
+	public function get_last_active_at(): int {
+		$last_active_at = get_post_meta( $this->post->ID, self::META_LAST_ACTIVE_AT, true );
+
+		return is_numeric( $last_active_at ) ? (int) $last_active_at : $this->get_created_at();
+	}
+
+	/**
+	 * Returns the timestamp at which this collaboration request was made.
+	 *
+	 * The post's own date, rather than a copy of it in meta: it is written by
+	 * wp_insert_post() at the moment the request is minted and nothing here ever
+	 * changes it.
+	 *
+	 * @return int Unix timestamp, or 0 if the date could not be read.
+	 */
+	public function get_created_at(): int {
+		$created_at = get_post_datetime( $this->post, 'date', 'gmt' );
+
+		return $created_at instanceof DateTimeImmutable ? $created_at->getTimestamp() : 0;
+	}
+
+	/**
+	 * Pushes the expiry back, for a collaborator who is still working.
+	 *
+	 * A link lasts a quarter of an hour after the last change rather than a
+	 * quarter of an hour flat, so that somebody in the middle of a paragraph
+	 * does not lose what they were lent — and so that a link nobody is using
+	 * still goes away on time.
+	 *
+	 * Recorded at most once a minute, which is what stops a keystroke's worth of
+	 * traffic becoming a row's worth of writes. What the expiry then becomes is
+	 * worked out from that, and stops at the ceiling — a session that reaches it
+	 * goes on recording activity while its remaining time counts down for real.
+	 *
+	 * @return bool Whether the activity was recorded.
+	 */
+	public function touch(): bool {
+		$created_at = $this->get_created_at();
+
+		// Without a creation date there is no ceiling to enforce, and a link
+		// that cannot be bounded is not one to extend.
+		if ( $created_at <= 0 || $this->is_expired() ) {
+			return false;
+		}
+
+		$now = time();
+
+		if ( $now - $this->get_last_active_at() < self::TOUCH_INTERVAL ) {
+			return false;
+		}
+
+		update_post_meta( $this->post->ID, self::META_LAST_ACTIVE_AT, $now );
+		update_post_meta(
+			$this->post->ID,
+			self::META_EXPIRES_AT,
+			min( $now + self::get_ttl(), $created_at + self::get_max_lifetime() )
+		);
+
+		return true;
 	}
 
 	/**
