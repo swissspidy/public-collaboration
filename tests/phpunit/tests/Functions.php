@@ -776,6 +776,103 @@ class Test_Functions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A poll carries every room the editor has open, and the post is rarely the
+	 * only one — a post with notes registers `root/comment` beside it. Naming
+	 * the room that was refused is what lets Gutenberg's client drop that one
+	 * and keep the post syncing; a 403 that names nothing reads as the account
+	 * having lost access, and takes the session with it.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_the_refusal_names_the_room_it_refused(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$own = 'postType/post:' . self::$post_id;
+
+		$result = $this->ask_for_room(
+			'/wp-sync/v1/updates',
+			[
+				'rooms' => [
+					[
+						'client_id' => 'abc',
+						'room'      => $own,
+					],
+					[
+						'client_id' => 'def',
+						'room'      => 'root/comment',
+					],
+				],
+			],
+			$user_id
+		);
+
+		$this->assertWPError( $result );
+
+		$data = $result->get_error_data();
+
+		$this->assertIsArray( $data );
+		$this->assertArrayHasKey( 'rooms', $data );
+		$this->assertSame( [ 'root/comment' ], $data['rooms'], 'Only the room that was refused is named.' );
+		$this->assertNotContains( $own, $data['rooms'], 'Naming their own room would end the session it is meant to save.' );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_the_refusal_names_every_room_it_refused_once(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$other_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		$result = $this->ask_for_room(
+			'/wp-sync/v1/updates',
+			[
+				'rooms' => [
+					[
+						'client_id' => 'abc',
+						'room'      => 'root/comment',
+					],
+					[
+						'client_id' => 'def',
+						'room'      => 'postType/post:' . $other_id,
+					],
+					[
+						'client_id' => 'ghi',
+						'room'      => 'root/comment',
+					],
+				],
+			],
+			$user_id
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame(
+			[ 'root/comment', 'postType/post:' . $other_id ],
+			$result->get_error_data()['rooms']
+		);
+	}
+
+	/**
+	 * Fail closed, and say so by saying nothing: a room this cannot read is a
+	 * room it cannot name, and a refusal that names nothing is the one the
+	 * client reads as the end of the session.
+	 *
+	 * @covers \PublicCollaboration\filter_sync_rooms
+	 */
+	public function test_a_room_it_cannot_name_is_refused_without_a_name(): void {
+		[ , $user_id ] = $this->create_collaborator();
+
+		$result = $this->ask_for_room(
+			'/wp-sync/v1/updates',
+			[ 'rooms' => [ [ 'client_id' => 'abc' ] ] ],
+			$user_id
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( [], $result->get_error_data()['rooms'] );
+	}
+
+	/**
 	 * A request with nothing to check is not a request to wave through.
 	 *
 	 * @covers \PublicCollaboration\filter_sync_rooms

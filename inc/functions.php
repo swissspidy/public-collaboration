@@ -811,10 +811,21 @@ function carries_changes( WP_REST_Request $request ): bool {
  * session that turns out to need a second room should have it added on purpose
  * rather than arrive through a gap.
  *
+ * The refusal names the rooms it refused, because that is the difference between
+ * one feature not syncing and the session ending. A poll asks for every room the
+ * editor has open at once, and the post is rarely the only one: opening a post
+ * with notes registers `root/comment` beside it, a collection room naming no
+ * object, which is precisely the case the floor waves through and this refuses.
+ * Gutenberg's own client reads `rooms` off a 403 and unregisters those rooms
+ * alone, keeping the rest; a 403 without it is read as the account having lost
+ * access altogether, and every room goes. Same answer, and the whole difference
+ * between notes not updating live and the collaborator watching the post stop
+ * moving.
+ *
  * @param mixed           $result  Response to replace the requested version with.
  * @param mixed           $server  Server instance.
  * @param WP_REST_Request $request Request used to generate the response.
- * @return mixed The result unchanged, or an error if a room is not theirs.
+ * @return mixed The result unchanged, or an error naming the rooms that are not theirs.
  */
 function filter_sync_rooms( $result, $server, $request ) {
 	if ( null !== $result || ! $request instanceof WP_REST_Request ) {
@@ -854,19 +865,39 @@ function filter_sync_rooms( $result, $server, $request ) {
 		? sprintf( 'postType/%s:%d', $parent->post_type, $parent->ID )
 		: null;
 
+	$refused    = [];
+	$is_refused = false;
+
 	foreach ( $rooms as $entry ) {
 		if ( null !== $own && is_string( $entry ) && $own === $entry ) {
 			continue;
 		}
 
-		return new WP_Error(
-			'public_collaboration_forbidden_room',
-			__( 'Sorry, you are only allowed to work on the post you were invited to.', 'public-collaboration' ),
-			[ 'status' => rest_authorization_required_code() ]
-		);
+		$is_refused = true;
+
+		/*
+		 * Only a room that arrived as a string can be named back, and a request
+		 * whose shape this does not recognise has nothing to name. It is still
+		 * refused — it just cannot say which room, and the client is right to
+		 * read that as the whole session being over.
+		 */
+		if ( is_string( $entry ) ) {
+			$refused[] = $entry;
+		}
 	}
 
-	return $result;
+	if ( ! $is_refused ) {
+		return $result;
+	}
+
+	return new WP_Error(
+		'public_collaboration_forbidden_room',
+		__( 'Sorry, you are only allowed to work on the post you were invited to.', 'public-collaboration' ),
+		[
+			'status' => rest_authorization_required_code(),
+			'rooms'  => array_values( array_unique( $refused ) ),
+		]
+	);
 }
 
 /**
