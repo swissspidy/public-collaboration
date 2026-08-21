@@ -4,6 +4,7 @@
 import {
 	BaseControl,
 	Button,
+	Notice,
 	useBaseControlProps,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
@@ -24,7 +25,7 @@ import { useCollaborationRequests } from './use-collaboration-requests';
 export function SharePanel() {
 	// Read rather than assumed: how long a link lasts is filterable, and the
 	// page is printed with whatever that filter had to say.
-	const { ttl } = getSettings();
+	const { ttl, maxPerPost, isSyncing } = getSettings();
 
 	const { baseControlProps, controlProps } = useBaseControlProps( {
 		__nextHasNoMarginBottom: true,
@@ -53,6 +54,8 @@ export function SharePanel() {
 		setCapability,
 	} = useCollaborationRequests();
 
+	const isFull = requests.length >= maxPerPost;
+
 	let label: string = __(
 		'Save the post to share it',
 		'public-collaboration'
@@ -67,8 +70,23 @@ export function SharePanel() {
 				: __( 'Share link', 'public-collaboration' );
 	}
 
+	if ( canShare && isFull ) {
+		// The endpoint would refuse this, and a button that turns into an error
+		// is a worse way to find that out than a button that says so.
+		label = __( 'Revoke a link to share another', 'public-collaboration' );
+	}
+
 	return (
 		<VStack spacing={ 4 }>
+			{ ! isSyncing && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'Changes will not appear as they are made. Turn on real-time collaboration in the Gutenberg plugin’s experiments to have everybody see the post change under them; without it, whoever saves last wins.',
+						'public-collaboration'
+					) }
+				</Notice>
+			) }
+
 			<BaseControl { ...baseControlProps }>
 				<Button
 					{ ...controlProps }
@@ -76,7 +94,7 @@ export function SharePanel() {
 					variant="secondary"
 					onClick={ create }
 					isBusy={ isCreating }
-					disabled={ isCreating || ! canShare }
+					disabled={ isCreating || ! canShare || isFull }
 					accessibleWhenDisabled
 					className="public-collaboration-share-button"
 				>

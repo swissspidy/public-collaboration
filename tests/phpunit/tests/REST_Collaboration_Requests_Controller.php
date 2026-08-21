@@ -138,6 +138,49 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 	}
 
 	/**
+	 * @covers ::create_item_permissions_check
+	 * @covers \PublicCollaboration\Collaboration_Request::get_max_per_post
+	 */
+	public function test_create_item_refuses_past_the_links_one_post_may_have(): void {
+		add_filter( 'public_collaboration_max_requests_per_post', static fn (): int => 2 );
+
+		$this->create_request();
+		$this->create_request();
+
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$this->assertErrorResponse(
+			'public_collaboration_too_many_requests',
+			rest_get_server()->dispatch( $request ),
+			400
+		);
+	}
+
+	/**
+	 * A link that has been revoked is not one of the links a post has.
+	 *
+	 * @covers ::create_item_permissions_check
+	 */
+	public function test_revoking_makes_room_for_another_link(): void {
+		add_filter( 'public_collaboration_max_requests_per_post', static fn (): int => 1 );
+
+		$created = $this->create_request();
+
+		$this->assertSame(
+			200,
+			rest_get_server()->dispatch(
+				new WP_REST_Request( 'DELETE', self::ROUTE . '/' . $created['token'] )
+			)->get_status()
+		);
+
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+
+		$this->assertSame( 201, rest_get_server()->dispatch( $request )->get_status() );
+	}
+
+	/**
 	 * @covers ::get_items
 	 * @covers \PublicCollaboration\Collaboration_Request::get_for_post
 	 */

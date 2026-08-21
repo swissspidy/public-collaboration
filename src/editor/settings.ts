@@ -14,6 +14,12 @@ import type { SharingSettings } from './types';
 const FALLBACK: SharingSettings = {
 	ttl: 15 * 60,
 	canUpload: true,
+	maxPerPost: 50,
+
+	// And towards saying nothing about real-time collaboration rather than
+	// warning about a thing that may well be on: a page that did not say is not
+	// evidence either way, and a notice nobody needs is one nobody reads.
+	isSyncing: true,
 };
 
 /**

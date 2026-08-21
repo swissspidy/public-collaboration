@@ -209,6 +209,14 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			);
 		}
 
+		if ( \count( Collaboration_Request::get_for_post( $post_id ) ) >= Collaboration_Request::get_max_per_post() ) {
+			return new WP_Error(
+				'public_collaboration_too_many_requests',
+				__( 'This post already has as many collaboration links as it can have at once. Revoke one before sharing another.', 'public-collaboration' ),
+				[ 'status' => 400 ]
+			);
+		}
+
 		return $this->check_capabilities( $this->get_capabilities( $request ) );
 	}
 
