@@ -37,7 +37,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 | Lifetime | 15 minutes after the last change, up to 12 hours in all — checked on every use rather than trusted to cron |
 | Scope | One post. Not the post list, not the media library, not the rest of wp-admin |
 | Powers | Whatever the sharer switched on: edit the post, upload media, or neither |
-| Ceiling | Never more than the sharer has themselves, and never more than 50 live links to one post |
+| Ceiling | Never more than the sharer has themselves, and 50 live links to one post unless the filter says otherwise |
 | Afterwards | The link, and the account behind it, are deleted |
 
 Unknown, expired, and inaccessible tokens all return the same 404, so the endpoint cannot be used to find out which tokens exist.

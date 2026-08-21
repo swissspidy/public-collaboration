@@ -209,6 +209,19 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			);
 		}
 
+		/*
+		 * Counted rather than locked. Two requests arriving in the same instant
+		 * can both find room and both take it, so this is a bound on what a
+		 * burst achieves rather than an invariant — which is what it is for. A
+		 * burst overshoots by however many requests were in flight together and
+		 * then finds the door shut until something expires, so no amount of
+		 * asking fills a table.
+		 *
+		 * A lock that actually held would have to be the database's.
+		 * wp_cache_add() is atomic only where a persistent object cache is
+		 * installed, and on a site without one — which is the default — it
+		 * would read like a guarantee while being a comfort.
+		 */
 		if ( \count( Collaboration_Request::get_for_post( $post_id ) ) >= Collaboration_Request::get_max_per_post() ) {
 			return new WP_Error(
 				'public_collaboration_too_many_requests',
