@@ -233,9 +233,36 @@ function is_collaborator( int $user_id ): bool {
  */
 function get_sharing_settings(): array {
 	return [
-		'ttl'       => Collaboration_Request::get_ttl(),
-		'canUpload' => current_user_can( 'upload_files' ),
+		'ttl'        => Collaboration_Request::get_ttl(),
+		'canUpload'  => current_user_can( 'upload_files' ),
+		'maxPerPost' => Collaboration_Request::get_max_per_post(),
+		'isSyncing'  => is_collaboration_enabled( (string) get_post_type() ),
 	];
+}
+
+/**
+ * Determines whether changes will reach everybody as they are made.
+ *
+ * Real-time collaboration is what a link is for: two people in one post, seeing
+ * each other work. It arrives with the Gutenberg plugin, behind an experiment
+ * that is off until somebody turns it on — and a post type can be left out of it
+ * separately. Without it a link still works, but the two of them are taking
+ * turns saving over each other, which is worth saying out loud rather than
+ * leaving to be discovered.
+ *
+ * @param string $post_type Post type being edited.
+ * @return bool Whether changes are shared as they are made.
+ */
+function is_collaboration_enabled( string $post_type ): bool {
+	if ( ! \function_exists( 'wp_is_collaboration_enabled' ) || ! wp_is_collaboration_enabled() ) {
+		return false;
+	}
+
+	if ( '' === $post_type || ! \function_exists( 'wp_is_post_type_collaboration_disabled' ) ) {
+		return true;
+	}
+
+	return ! wp_is_post_type_collaboration_disabled( $post_type );
 }
 
 /**

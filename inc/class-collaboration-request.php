@@ -84,6 +84,11 @@ final class Collaboration_Request {
 	public const DEFAULT_MAX_LIFETIME = 12 * HOUR_IN_SECONDS;
 
 	/**
+	 * Default ceiling on how many links one post may have live at once.
+	 */
+	public const DEFAULT_MAX_PER_POST = 50;
+
+	/**
 	 * How stale an expiry has to be before it is worth writing again, in seconds.
 	 */
 	private const TOUCH_INTERVAL = MINUTE_IN_SECONDS;
@@ -276,6 +281,26 @@ final class Collaboration_Request {
 		}
 
 		return $request;
+	}
+
+	/**
+	 * Returns how many links one post may have live at once.
+	 *
+	 * Set well above what anybody sharing a post has reason to hand out: it is
+	 * there so that a script clicking the button cannot fill a table, not to
+	 * ration a person's invitations.
+	 *
+	 * @return int Maximum number of live requests per post.
+	 */
+	public static function get_max_per_post(): int {
+		/**
+		 * Filters how many links one post may have live at once.
+		 *
+		 * @param int $max_per_post Maximum number of live requests. Default 50.
+		 */
+		$max_per_post = (int) apply_filters( 'public_collaboration_max_requests_per_post', self::DEFAULT_MAX_PER_POST );
+
+		return max( 1, $max_per_post );
 	}
 
 	/**

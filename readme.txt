@@ -20,6 +20,8 @@ This plugin removes all of that. While editing a post, open **Public collaborati
 
 The panel lists every link you have handed out that is still live, so you can open one again, change what it allows, or revoke it on the spot.
 
+Turn on real-time collaboration in the Gutenberg plugin's experiments and the two of you see each other work, which is what this is for. Without it the link still works, but you are taking turns saving over each other — so the panel says so while it is off.
+
 = What they can do =
 
 You choose when you share, and can change your mind for as long as the link lasts:
@@ -61,6 +63,10 @@ Yes — WordPress's usual "somebody else is editing this post" lock is stood dow
 = Can I take access away sooner? =
 
 Yes. Revoke the link in the **Public collaboration** panel and it stops working immediately, or turn off one of its switches at any time to take just that part away.
+
+= Do we see each other type? =
+
+With real-time collaboration turned on in the Gutenberg plugin's experiments, yes: that is the feature this is built around, and a collaboration link is a way of letting somebody into it without an account. Gutenberg can also leave a single post type out of collaboration while the experiment is on, which comes to the same thing for that post type. With it off, the link still works and they can still edit — but neither of you sees the other's changes until they are saved, and the last save wins.
 
 = Why does this need the Gutenberg plugin? =
 

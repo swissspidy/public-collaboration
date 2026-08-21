@@ -26,6 +26,10 @@ export interface SharingSettings {
 	ttl: number;
 	/** Whether the person sharing may upload media themselves. */
 	canUpload: boolean;
+	/** How many links this post may have live at once. */
+	maxPerPost: number;
+	/** Whether changes reach everybody as they are made. */
+	isSyncing: boolean;
 }
 
 declare global {

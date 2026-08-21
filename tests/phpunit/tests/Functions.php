@@ -20,6 +20,7 @@ use function PublicCollaboration\filter_rest_pre_insert;
 use function PublicCollaboration\get_collaborator_data;
 use function PublicCollaboration\get_editor_url;
 use function PublicCollaboration\get_sharing_settings;
+use function PublicCollaboration\is_collaboration_enabled;
 use function PublicCollaboration\is_collaborator;
 use function PublicCollaboration\filter_post_lock_meta;
 use function PublicCollaboration\filter_show_post_locked_dialog;
@@ -581,6 +582,53 @@ class Test_Functions extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
 
 		$this->assertFalse( get_sharing_settings()['canUpload'] );
+	}
+
+	/**
+	 * Real-time collaboration is what the link is for, and it is off until
+	 * somebody turns it on.
+	 *
+	 * @covers \PublicCollaboration\is_collaboration_enabled
+	 * @covers \PublicCollaboration\get_sharing_settings
+	 */
+	public function test_syncing_is_reported_as_off_without_the_experiment(): void {
+		// Gutenberg's own gate. Whether the function is there at all is the
+		// first question, and on a WordPress without it the answer is no.
+		$this->assertSame(
+			\function_exists( 'wp_is_collaboration_enabled' ) && wp_is_collaboration_enabled(),
+			is_collaboration_enabled( 'post' ),
+			'What this reports is what Gutenberg was asked.'
+		);
+
+		$this->assertFalse(
+			is_collaboration_enabled( 'nonexistent_post_type' ),
+			'A post type nothing knows about syncs nothing.'
+		);
+
+		$this->assertArrayHasKey( 'isSyncing', get_sharing_settings() );
+	}
+
+	/**
+	 * @covers \PublicCollaboration\get_sharing_settings
+	 * @covers \PublicCollaboration\Collaboration_Request::get_max_per_post
+	 */
+	public function test_sharing_settings_carry_the_links_a_post_may_have(): void {
+		$this->assertSame(
+			Collaboration_Request::DEFAULT_MAX_PER_POST,
+			get_sharing_settings()['maxPerPost']
+		);
+
+		add_filter( 'public_collaboration_max_requests_per_post', static fn (): int => 3 );
+
+		$this->assertSame( 3, get_sharing_settings()['maxPerPost'] );
+
+		remove_all_filters( 'public_collaboration_max_requests_per_post' );
+
+		// However few somebody asks for, a post that can hold no links at all
+		// is a post that cannot be shared.
+		add_filter( 'public_collaboration_max_requests_per_post', static fn (): int => 0 );
+
+		$this->assertSame( 1, Collaboration_Request::get_max_per_post() );
 	}
 
 	/**
