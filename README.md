@@ -15,7 +15,7 @@ Install and activate the latest nightly build on your WordPress website, open a 
 
 Note: Requires **WordPress 7.1+**, **PHP 8.0+**, and the [Gutenberg plugin](https://wordpress.org/plugins/gutenberg/). WordPress will refuse to activate this plugin without Gutenberg — it is declared as a dependency in the plugin header, so the plugins screen offers to install it for you.
 
-**Turn on real-time collaboration** in Gutenberg's experiments to get the point of this: two people in one post, watching each other work. Without it a link still works and a collaborator can still edit, but neither of them sees the other until somebody saves — and then whoever saved last has won. The panel says so when it is off.
+**Turn on real-time collaboration** in Gutenberg's experiments to get the point of this: two people in one post, watching each other work. Gutenberg also lets a post type be left out of collaboration separately, so the experiment being on is not on its own enough for the post in front of you. Without collaboration a link still works and a collaborator can still edit, but neither of them sees the other until somebody saves — and then whoever saved last has won. The panel says so either way.
 
 ### Using WordPress Playground
 
@@ -37,7 +37,7 @@ A collaboration request is a post of a private, UI-less post type whose slug is 
 | Lifetime | 15 minutes after the last change, up to 12 hours in all — checked on every use rather than trusted to cron |
 | Scope | One post. Not the post list, not the media library, not the rest of wp-admin |
 | Powers | Whatever the sharer switched on: edit the post, upload media, or neither |
-| Ceiling | Never more than the sharer has themselves, and 50 live links to one post unless the filter says otherwise |
+| Ceiling | Never more than the sharer has themselves, and 50 live links to one post unless the filter says otherwise — counted rather than locked, so requests arriving together can cross the number before the next one is refused |
 | Afterwards | The link, and the account behind it, are deleted |
 
 Unknown, expired, and inaccessible tokens all return the same 404, so the endpoint cannot be used to find out which tokens exist.
@@ -69,7 +69,7 @@ Following a working link signs the visitor in as a temporary account and drops t
 |---|---|
 | `public_collaboration_request_ttl` | How long a link outlives the last change made through it, in seconds. Default 15 minutes, floor of 1 minute. |
 | `public_collaboration_request_max_lifetime` | The longest a link may live, however much is done through it, in seconds. Default 12 hours, never below the idle time. |
-| `public_collaboration_max_requests_per_post` | How many links one post may have live at once. Default 50, floor of 1. |
+| `public_collaboration_max_requests_per_post` | How many links one post may have live at once. Default 50, floor of 1. Counted rather than locked, so requests arriving together can cross it. |
 | `public_collaboration_rewrite_slug` | URL prefix of the collaboration link. Default `collaborate`. |
 | `public_collaboration_template` | Absolute path to the template rendering the collaboration page. |
 

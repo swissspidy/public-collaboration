@@ -66,7 +66,7 @@ Yes. Revoke the link in the **Public collaboration** panel and it stops working 
 
 = Do we see each other type? =
 
-With real-time collaboration turned on in the Gutenberg plugin's experiments, yes: that is the feature this is built around, and a collaboration link is a way of letting somebody into it without an account. With it off, the link still works and they can still edit — but neither of you sees the other's changes until they are saved, and the last save wins.
+With real-time collaboration turned on in the Gutenberg plugin's experiments, yes: that is the feature this is built around, and a collaboration link is a way of letting somebody into it without an account. Gutenberg can also leave a single post type out of collaboration while the experiment is on, which comes to the same thing for that post type. With it off, the link still works and they can still edit — but neither of you sees the other's changes until they are saved, and the last save wins.
 
 = Why does this need the Gutenberg plugin? =
 
