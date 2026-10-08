@@ -27,7 +27,7 @@
 		"qrcode.react": "^4.2.0"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.62.1",
+		"@playwright/test": "^1.63.0",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
 		"@wordpress/api-fetch": "^7.55.0",
