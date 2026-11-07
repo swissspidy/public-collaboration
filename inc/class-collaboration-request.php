@@ -59,6 +59,16 @@ final class Collaboration_Request {
 	public const META_USER_ID = 'pubcol_user_id';
 
 	/**
+	 * Meta key holding the label the sharer gave the link.
+	 */
+	public const META_LABEL = 'pubcol_label';
+
+	/**
+	 * Longest a link's label may be, in characters.
+	 */
+	public const MAX_LABEL_LENGTH = 100;
+
+	/**
 	 * User meta key pointing back at the collaboration request.
 	 */
 	public const USER_META_REQUEST_ID = 'pubcol_request_id';
@@ -132,10 +142,11 @@ final class Collaboration_Request {
 	 *
 	 *     @type int      $post         ID of the post to collaborate on.
 	 *     @type string[] $capabilities Optional. Capabilities to grant. Defaults to all of them.
+	 *     @type string   $label        Optional. Who, or what, the link is for. Default empty.
 	 * }
 	 * @return Collaboration_Request|WP_Error New collaboration request on success, error object on failure.
 	 *
-	 * @phpstan-param array{post: int, capabilities?: string[]} $args
+	 * @phpstan-param array{post: int, capabilities?: string[], label?: string} $args
 	 */
 	public static function create( array $args ) {
 		/*
@@ -194,6 +205,7 @@ final class Collaboration_Request {
 		update_post_meta( $post_id, self::META_EXPIRES_AT, time() + self::get_ttl() );
 		update_post_meta( $post_id, self::META_LAST_ACTIVE_AT, time() );
 		$request->set_capabilities( $args['capabilities'] ?? self::get_available_capabilities() );
+		$request->set_label( $args['label'] ?? '' );
 
 		/**
 		 * Fires right after a collaboration request has been created.
@@ -635,6 +647,54 @@ final class Collaboration_Request {
 	 */
 	public function allows( string $capability ): bool {
 		return \in_array( $capability, $this->get_capabilities(), true );
+	}
+
+	/**
+	 * Returns the label the sharer gave this link.
+	 *
+	 * Somebody handing out more than one link needs a way to tell them apart
+	 * before anybody has followed them — and a collaborator's display name,
+	 * generated for them and theirs to change, says nothing about who the link
+	 * was sent to. This is the sharer's own note to themselves, never shown to
+	 * the person holding the link.
+	 *
+	 * @return string The label, or an empty string if it has none.
+	 */
+	public function get_label(): string {
+		$label = get_post_meta( $this->post->ID, self::META_LABEL, true );
+
+		return is_string( $label ) ? $label : '';
+	}
+
+	/**
+	 * Sets the label the sharer gave this link.
+	 *
+	 * Plain text, trimmed to {@see Collaboration_Request::MAX_LABEL_LENGTH}
+	 * characters. An empty label removes the meta rather than storing nothing.
+	 *
+	 * @param string $label The label.
+	 * @return void
+	 */
+	public function set_label( string $label ): void {
+		$label = self::sanitize_label( $label );
+
+		if ( '' === $label ) {
+			delete_post_meta( $this->post->ID, self::META_LABEL );
+
+			return;
+		}
+
+		update_post_meta( $this->post->ID, self::META_LABEL, wp_slash( $label ) );
+	}
+
+	/**
+	 * Turns whatever was sent as a label into one fit to store.
+	 *
+	 * @param string $label The label as sent.
+	 * @return string The label as stored.
+	 */
+	public static function sanitize_label( string $label ): string {
+		return trim( mb_substr( sanitize_text_field( $label ), 0, self::MAX_LABEL_LENGTH ) );
 	}
 
 	/**

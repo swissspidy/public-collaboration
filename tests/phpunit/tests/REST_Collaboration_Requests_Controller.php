@@ -523,6 +523,121 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 	}
 
 	/**
+	 * @covers ::create_item
+	 * @covers ::prepare_item_for_response
+	 */
+	public function test_create_item_takes_a_label(): void {
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+		$request->set_param( 'label', 'Copy edits from Sam' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'Copy edits from Sam', $response->get_data()['label'] );
+	}
+
+	/**
+	 * @covers ::create_item
+	 */
+	public function test_a_link_has_no_label_unless_given_one(): void {
+		$this->assertSame( '', $this->create_request()['label'] );
+	}
+
+	/**
+	 * @covers ::create_item
+	 */
+	public function test_create_item_strips_markup_from_a_label(): void {
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+		$request->set_param( 'label', '<script>alert(1)</script>Sam <b>Smith</b>' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'Sam Smith', $response->get_data()['label'] );
+	}
+
+	/**
+	 * @covers ::create_item
+	 */
+	public function test_create_item_rejects_a_label_that_is_too_long(): void {
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+		$request->set_param( 'label', str_repeat( 'a', Collaboration_Request::MAX_LABEL_LENGTH + 1 ) );
+
+		$this->assertErrorResponse( 'rest_invalid_param', rest_get_server()->dispatch( $request ), 400 );
+	}
+
+	/**
+	 * @covers ::update_item
+	 */
+	public function test_update_item_renames_a_link_without_touching_what_it_grants(): void {
+		$data = $this->create_request( [ 'edit' ] );
+
+		$request = new WP_REST_Request( 'PUT', self::ROUTE . '/' . $data['token'] );
+		$request->set_param( 'label', 'Legal review' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Legal review', $response->get_data()['label'] );
+		$this->assertSame( [ 'edit' ], $response->get_data()['capabilities'] );
+	}
+
+	/**
+	 * @covers ::update_item
+	 */
+	public function test_update_item_changes_what_a_link_grants_without_touching_its_label(): void {
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+		$request->set_param( 'label', 'Legal review' );
+
+		$data = (array) rest_get_server()->dispatch( $request )->get_data();
+
+		$request = new WP_REST_Request( 'PUT', self::ROUTE . '/' . $data['token'] );
+		$request->set_param( 'capabilities', [ 'edit' ] );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'Legal review', $response->get_data()['label'] );
+		$this->assertSame( [ 'edit' ], $response->get_data()['capabilities'] );
+	}
+
+	/**
+	 * @covers ::update_item
+	 */
+	public function test_update_item_clears_a_label(): void {
+		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request->set_param( 'post', self::$post_id );
+		$request->set_param( 'label', 'Legal review' );
+
+		$data = (array) rest_get_server()->dispatch( $request )->get_data();
+
+		$request = new WP_REST_Request( 'PUT', self::ROUTE . '/' . $data['token'] );
+		$request->set_param( 'label', '' );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( '', $response->get_data()['label'] );
+	}
+
+	/**
+	 * @covers ::update_item
+	 */
+	public function test_update_item_needs_something_to_change(): void {
+		$data = $this->create_request();
+
+		$this->assertErrorResponse(
+			'rest_missing_callback_param',
+			rest_get_server()->dispatch( new WP_REST_Request( 'PUT', self::ROUTE . '/' . $data['token'] ) ),
+			400
+		);
+	}
+
+	/**
 	 * @covers ::update_item_permissions_check
 	 */
 	public function test_update_item_is_not_writable_by_anybody_else(): void {
@@ -619,7 +734,7 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 
 		$this->assertSame( 'collaboration-request', $schema['title'] );
 		$this->assertSame(
-			[ 'token', 'url', 'post', 'expires_at', 'last_active', 'capabilities', 'joined', 'collaborator' ],
+			[ 'token', 'url', 'label', 'post', 'expires_at', 'last_active', 'capabilities', 'joined', 'collaborator' ],
 			array_keys( $schema['properties'] )
 		);
 	}

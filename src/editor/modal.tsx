@@ -123,6 +123,8 @@ interface CollaborationModalProps {
 	isNew: boolean;
 	/** Whether the link is being revoked right now. */
 	isRevoking: boolean;
+	/** Called as the label is typed into. */
+	onChangeLabel: ( label: string ) => void;
 	/** Called when a capability is switched on or off. */
 	onToggleCapability: (
 		capability: CollaborationCapability,
@@ -145,6 +147,7 @@ interface CollaborationModalProps {
  * @param props.grantable          What the person sharing may hand out, which is never more than they have.
  * @param props.isNew              Whether the link was just minted, and so can still be called off.
  * @param props.isRevoking         Whether the link is being revoked right now.
+ * @param props.onChangeLabel      Called as the label is typed into.
  * @param props.onToggleCapability Called when a capability is switched on or off.
  * @param props.onRevoke           Called when the person takes the link back.
  * @param props.onRequestClose     Called when the person is done with the dialog.
@@ -154,6 +157,7 @@ export function CollaborationModal( {
 	grantable,
 	isNew,
 	isRevoking,
+	onChangeLabel,
 	onToggleCapability,
 	onRevoke,
 	onRequestClose,
@@ -224,6 +228,28 @@ export function CollaborationModal( {
 					icon={ copy }
 					showTooltip={ false }
 					label={ __( 'Copy link', 'public-collaboration' ) }
+				/>
+			</div>
+
+			<div className="public-collaboration-modal__label">
+				<TextControl
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+					label={ __(
+						'Who is this link for?',
+						'public-collaboration'
+					) }
+					help={ __(
+						'Optional. Only people who can manage this post’s links see it — it helps tell links apart.',
+						'public-collaboration'
+					) }
+					placeholder={ __(
+						'e.g. Sam, or Legal review',
+						'public-collaboration'
+					) }
+					value={ request.label }
+					maxLength={ 100 }
+					onChange={ onChangeLabel }
 				/>
 			</div>
 

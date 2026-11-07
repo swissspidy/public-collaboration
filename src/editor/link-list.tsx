@@ -58,6 +58,80 @@ function describeState( request: CollaborationRequest ): string {
 }
 
 /**
+ * Names a link, for the first line of its row.
+ *
+ * The sharer's own label wins: it is what they chose to tell the links apart
+ * by. Without one, whoever has turned up is the next best thing, and a link
+ * nobody has opened yet is just that.
+ *
+ * @param request The link being named.
+ */
+function getName( request: CollaborationRequest ): string {
+	if ( request.label ) {
+		return request.label;
+	}
+
+	if ( request.joined && request.collaborator ) {
+		return request.collaborator;
+	}
+
+	return __( 'Not opened yet', 'public-collaboration' );
+}
+
+/**
+ * Says what a link is doing, and who is on it if the name does not.
+ *
+ * @param request The link being described.
+ */
+function describe( request: CollaborationRequest ): string {
+	const state = describeState( request );
+
+	if ( ! request.label ) {
+		return state;
+	}
+
+	if ( request.joined && request.collaborator ) {
+		return sprintf(
+			/* translators: 1: Display name of the collaborator. 2: What the link is doing, e.g. "Working on it now". */
+			__( '%1$s · %2$s', 'public-collaboration' ),
+			request.collaborator,
+			state
+		);
+	}
+
+	return sprintf(
+		/* translators: %s: What the link is doing, e.g. "Expires in 12 minutes". */
+		__( 'Not opened yet · %s', 'public-collaboration' ),
+		state
+	);
+}
+
+/**
+ * Describes the revoke button, which has only an icon to go on.
+ *
+ * @param request The link the button revokes.
+ */
+function getRevokeLabel( request: CollaborationRequest ): string {
+	if ( request.label ) {
+		return sprintf(
+			/* translators: %s: Label the sharer gave the link. */
+			__( 'Revoke the link for %s', 'public-collaboration' ),
+			request.label
+		);
+	}
+
+	if ( request.joined && request.collaborator ) {
+		return sprintf(
+			/* translators: %s: Display name of the collaborator. */
+			__( 'Revoke the link %s is using', 'public-collaboration' ),
+			request.collaborator
+		);
+	}
+
+	return __( 'Revoke link', 'public-collaboration' );
+}
+
+/**
  * Lists the links that have been handed out, and offers them back.
  *
  * A link outlives the dialog it was minted in, so this is where it can be
@@ -112,17 +186,10 @@ export function LinkList( {
 									alignment="left"
 									className="public-collaboration-links__label"
 								>
-									<Text truncate>
-										{ request.joined && request.collaborator
-											? request.collaborator
-											: __(
-													'Not opened yet',
-													'public-collaboration'
-											  ) }
-									</Text>
+									<Text truncate>{ getName( request ) }</Text>
 
 									<Text variant="muted" size="12">
-										{ describeState( request ) }
+										{ describe( request ) }
 									</Text>
 								</VStack>
 							</Button>
@@ -131,21 +198,7 @@ export function LinkList( {
 								className="public-collaboration-links__revoke"
 								size="small"
 								icon={ closeSmall }
-								label={
-									request.joined && request.collaborator
-										? sprintf(
-												/* translators: %s: Display name of the collaborator. */
-												__(
-													'Revoke the link %s is using',
-													'public-collaboration'
-												),
-												request.collaborator
-										  )
-										: __(
-												'Revoke link',
-												'public-collaboration'
-										  )
-								}
+								label={ getRevokeLabel( request ) }
 								onClick={ () => onRevoke( request.token ) }
 								isBusy={ isRevoking }
 								disabled={ isRevoking }

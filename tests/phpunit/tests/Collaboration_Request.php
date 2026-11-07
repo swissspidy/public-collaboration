@@ -545,4 +545,55 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 		$this->assertStringContainsString( $request->get_token(), $request->get_url() );
 		$this->assertStringNotContainsString( 'p=' . $request->get_post()->ID, $request->get_url() );
 	}
+
+	/**
+	 * @covers ::set_label
+	 * @covers ::get_label
+	 */
+	public function test_label_round_trips(): void {
+		$request = $this->create_request();
+
+		$this->assertSame( '', $request->get_label() );
+
+		$request->set_label( "  Sam's \\ edits  " );
+
+		$this->assertSame( "Sam's \\ edits", $request->get_label() );
+	}
+
+	/**
+	 * @covers ::set_label
+	 */
+	public function test_an_empty_label_removes_it(): void {
+		$request = $this->create_request();
+
+		$request->set_label( 'Sam' );
+		$request->set_label( '   ' );
+
+		$this->assertSame( '', $request->get_label() );
+		$this->assertFalse( metadata_exists( 'post', $request->get_post()->ID, Collaboration_Request::META_LABEL ) );
+	}
+
+	/**
+	 * @covers ::sanitize_label
+	 */
+	public function test_a_label_is_cut_to_length(): void {
+		$label = Collaboration_Request::sanitize_label( str_repeat( 'é', Collaboration_Request::MAX_LABEL_LENGTH + 20 ) );
+
+		$this->assertSame( Collaboration_Request::MAX_LABEL_LENGTH, mb_strlen( $label ) );
+	}
+
+	/**
+	 * @covers ::create
+	 */
+	public function test_create_takes_a_label(): void {
+		$request = Collaboration_Request::create(
+			[
+				'post'  => self::$post_id,
+				'label' => 'Sam',
+			]
+		);
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+		$this->assertSame( 'Sam', $request->get_label() );
+	}
 }

@@ -85,6 +85,11 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 							],
 							'default'     => [ Collaboration_Request::CAP_EDIT, Collaboration_Request::CAP_UPLOAD ],
 						],
+						'label'        => [
+							'description' => __( 'Who, or what, the link is for. Only ever shown to whoever manages the post\'s links.', 'public-collaboration' ),
+							'type'        => 'string',
+							'maxLength'   => Collaboration_Request::MAX_LABEL_LENGTH,
+						],
 					],
 				],
 				'schema' => [ $this, 'get_public_item_schema' ],
@@ -118,7 +123,11 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 								'type' => 'string',
 								'enum' => [ Collaboration_Request::CAP_EDIT, Collaboration_Request::CAP_UPLOAD ],
 							],
-							'required'    => true,
+						],
+						'label'        => [
+							'description' => __( 'Who, or what, the link is for. Only ever shown to whoever manages the post\'s links.', 'public-collaboration' ),
+							'type'        => 'string',
+							'maxLength'   => Collaboration_Request::MAX_LABEL_LENGTH,
 						],
 					],
 				],
@@ -244,6 +253,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			[
 				'post'         => $this->get_post_id( $request ),
 				'capabilities' => $this->get_capabilities( $request ),
+				'label'        => $this->get_label( $request ),
 			]
 		);
 
@@ -300,10 +310,15 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Changes what a collaboration request grants.
+	 * Changes what a collaboration request grants, or what it is called.
 	 *
-	 * Takes effect on the collaborator's next request: nothing is copied onto
-	 * their account, so there is nothing left to revoke separately.
+	 * A change to what it grants takes effect on the collaborator's next
+	 * request: nothing is copied onto their account, so there is nothing left
+	 * to revoke separately.
+	 *
+	 * Either field may be sent on its own. Leaving one out leaves it as it is,
+	 * which is what lets the label be typed into while the switches are being
+	 * flipped without either undoing the other.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_REST_Response|WP_Error Response object on success, error object on failure.
@@ -315,7 +330,24 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			return $this->not_found_error();
 		}
 
-		$collaboration_request->set_capabilities( $this->get_capabilities( $request ) );
+		$has_capabilities = $request->has_param( 'capabilities' );
+		$has_label        = $request->has_param( 'label' );
+
+		if ( ! $has_capabilities && ! $has_label ) {
+			return new WP_Error(
+				'rest_missing_callback_param',
+				__( 'Nothing to change: send capabilities, a label, or both.', 'public-collaboration' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		if ( $has_capabilities ) {
+			$collaboration_request->set_capabilities( $this->get_capabilities( $request ) );
+		}
+
+		if ( $has_label ) {
+			$collaboration_request->set_label( $this->get_label( $request ) );
+		}
 
 		return $this->prepare_item_for_response( $collaboration_request, $request );
 	}
@@ -359,7 +391,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	 * Reads the post ID off a request.
 	 *
 	 * Request parameters arrive as whatever was sent; the schema is what narrows
-	 * them, and these three readers are where that narrowing is spelled out for
+	 * them, and these readers are where that narrowing is spelled out for
 	 * the rest of the class.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -401,6 +433,18 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 		}
 
 		return array_values( array_filter( $capabilities, 'is_string' ) );
+	}
+
+	/**
+	 * Reads the label off a request.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return string The label, or an empty string if none was sent.
+	 */
+	private function get_label( WP_REST_Request $request ): string {
+		$label = $request['label'];
+
+		return is_string( $label ) ? $label : '';
 	}
 
 	/**
@@ -512,6 +556,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 		$data = [
 			'token'        => $item->get_token(),
 			'url'          => $item->get_url(),
+			'label'        => $item->get_label(),
 			'post'         => $item->get_parent_id(),
 			'expires_at'   => $item->get_expires_at(),
 			'last_active'  => $item->get_last_active_at(),
@@ -577,6 +622,12 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 					'format'      => 'uri',
 					'context'     => [ 'view', 'edit' ],
 					'readonly'    => true,
+				],
+				'label'        => [
+					'description' => __( 'Who, or what, the link is for. Only ever shown to whoever manages the post\'s links.', 'public-collaboration' ),
+					'type'        => 'string',
+					'maxLength'   => Collaboration_Request::MAX_LABEL_LENGTH,
+					'context'     => [ 'view', 'edit' ],
 				],
 				'post'         => [
 					'description' => __( 'ID of the post being collaborated on.', 'public-collaboration' ),

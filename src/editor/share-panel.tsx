@@ -52,6 +52,7 @@ export function SharePanel() {
 		show,
 		close,
 		setCapability,
+		setLabel,
 	} = useCollaborationRequests();
 
 	const isFull = requests.length >= maxPerPost;
@@ -117,6 +118,9 @@ export function SharePanel() {
 					grantable={ grantable }
 					isNew={ isNewLink }
 					isRevoking={ revoking.includes( openRequest.token ) }
+					onChangeLabel={ ( value ) =>
+						setLabel( openRequest.token, value )
+					}
 					onToggleCapability={ ( capability, enabled ) =>
 						setCapability( openRequest.token, capability, enabled )
 					}

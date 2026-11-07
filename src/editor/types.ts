@@ -6,6 +6,8 @@ export interface CollaborationRequest {
 	token: string;
 	/** URL to share with the collaborator. */
 	url: string;
+	/** Who, or what, the link is for. Empty if it was not given a label. */
+	label: string;
 	/** ID of the post being collaborated on. */
 	post: number;
 	/** Unix timestamp at which the collaboration request expires. */
