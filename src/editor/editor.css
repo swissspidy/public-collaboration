@@ -35,6 +35,10 @@
 	min-width: 0;
 }
 
+.public-collaboration-modal__label {
+	margin: 0 0 1.5em;
+}
+
 .public-collaboration-modal__capabilities {
 	margin: 0 0 1.5em;
 	padding: 0;

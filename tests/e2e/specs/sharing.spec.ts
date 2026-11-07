@@ -253,4 +253,48 @@ test.describe( 'Sharing a post', () => {
 			dialog.getByRole( 'checkbox', { name: 'Edit post content' } )
 		).toBeChecked();
 	} );
+
+	test( 'labels a link so it can be told apart from the others', async ( {
+		page,
+		collaboration,
+	} ) => {
+		await collaboration.shareLink();
+
+		const dialog = collaboration.getDialog();
+
+		// Saved once the typing stops rather than on every keystroke, so this
+		// waits for the one request that carries it. Not by method: apiFetch
+		// sends a PUT as a POST that says it is one.
+		const saved = page.waitForResponse(
+			( response ) =>
+				response.url().includes( 'collaboration-requests' ) &&
+				'GET' !== response.request().method() &&
+				response.ok()
+		);
+
+		await dialog
+			.getByRole( 'textbox', { name: 'Who is this link for?' } )
+			.fill( 'Legal review' );
+		await saved;
+
+		await dialog.getByRole( 'button', { name: 'Done' } ).click();
+		await expect( dialog ).toBeHidden();
+
+		const links = collaboration.getLinks();
+
+		await expect( links.first() ).toContainText( 'Legal review' );
+		await expect(
+			links.first().getByRole( 'button', {
+				name: 'Revoke the link for Legal review',
+			} )
+		).toBeVisible();
+
+		// The server's, not this tab's memory of what was typed.
+		await page.reload();
+		await collaboration.openPanel();
+
+		await expect( collaboration.getLinks().first() ).toContainText(
+			'Legal review'
+		);
+	} );
 } );

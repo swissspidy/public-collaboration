@@ -27,7 +27,7 @@ Use [WordPress Playground](https://wordpress.org/playground/) to try this plugin
 
 ## How it works
 
-While editing a post, **Public collaboration** appears in the settings sidebar. Clicking **Share link** creates a short-lived collaboration request and shows its link as a QR code. Closing that dialog leaves the link working: the panel lists every link to the post that is still live, so each one can be opened again, have what it grants changed, or be revoked for as long as it lasts.
+While editing a post, **Public collaboration** appears in the settings sidebar. Clicking **Share link** creates a short-lived collaboration request and shows its link as a QR code. Closing that dialog leaves the link working: the panel lists every link to the post that is still live, so each one can be opened again, have what it grants changed, or be revoked for as long as it lasts. A link can be given a label — who it was sent to, or what it is for — so that several handed out at once can be told apart before anybody has opened them. The label is the sharer's own note: the person holding the link never sees it.
 
 A collaboration request is a post of a private, UI-less post type whose slug is a 128-bit random token, with the post being shared as its parent. That token is the only credential involved, so it is treated as one:
 
@@ -97,7 +97,7 @@ add_action(
 | `GET /public-collaboration/v1/collaboration-requests?post=<id>` | `edit_post` on the post | List the live links to a post |
 | `POST /public-collaboration/v1/collaboration-requests` | `edit_post` on the post, plus `upload_files` to grant uploads | Share a post |
 | `GET /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | See whether anybody has joined |
-| `PUT /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Change what the link grants |
+| `PUT /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Change what the link grants, its label, or both |
 | `DELETE /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Revoke a link |
 
 Somebody who is in the editor on a collaboration link themselves is refused every one of these, listing included. Being able to edit the post is what qualifies anybody else to manage its links, and a collaborator can edit the post — so that one exception is spelled out rather than left to follow from the rule.

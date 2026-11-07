@@ -27,6 +27,15 @@ const REST_BASE = '/public-collaboration/v1/collaboration-requests';
 const POLL_INTERVAL = 30000;
 const WATCHED_POLL_INTERVAL = 5000;
 
+/**
+ * How long typing has to pause before a label is saved, in milliseconds.
+ *
+ * Long enough not to send a request per keystroke, short enough that closing
+ * the dialog straight after typing does not feel like it lost anything — and
+ * the timer belongs to the panel rather than the dialog, so it fires either way.
+ */
+const LABEL_SAVE_DELAY = 600;
+
 /*
  * Never more than the sharer has themselves: the server refuses to lend out an
  * upload to somebody who cannot upload, so the panel does not offer it and a
@@ -149,6 +158,16 @@ export function useCollaborationRequests() {
 		inFlight: new Set< string >(),
 	} );
 
+	/*
+	 * Labels typed but not yet saved, and the timers that will save them. What
+	 * is in here wins over whatever a poll brings back, for the same reason a
+	 * capability in flight does: the server has not heard about it yet.
+	 */
+	const labels = useRef( {
+		drafts: new Map< string, string >(),
+		timers: new Map< string, ReturnType< typeof setTimeout > >(),
+	} );
+
 	/** Puts a list on screen, and where the callbacks can see it. */
 	const applyRequests = useCallback( ( next: CollaborationRequest[] ) => {
 		requestsRef.current = next;
@@ -198,8 +217,12 @@ export function useCollaborationRequests() {
 			 */
 			applyRequests(
 				live.map( ( item ) => {
+					const draft = labels.current.drafts.get( item.token );
+					const withLabel =
+						undefined === draft ? item : { ...item, label: draft };
+
 					if ( ! updates.current.inFlight.has( item.token ) ) {
-						return item;
+						return withLabel;
 					}
 
 					const pending = requestsRef.current.find(
@@ -207,8 +230,8 @@ export function useCollaborationRequests() {
 					);
 
 					return pending
-						? { ...item, capabilities: pending.capabilities }
-						: item;
+						? { ...withLabel, capabilities: pending.capabilities }
+						: withLabel;
 				} )
 			);
 
@@ -336,6 +359,10 @@ export function useCollaborationRequests() {
 
 			changes.current += 1;
 
+			clearTimeout( labels.current.timers.get( token ) );
+			labels.current.timers.delete( token );
+			labels.current.drafts.delete( token );
+
 			updates.current.queues.delete( token );
 			updates.current.latest.delete( token );
 			updates.current.inFlight.delete( token );
@@ -448,6 +475,95 @@ export function useCollaborationRequests() {
 		[ applyRequests, createErrorNotice ]
 	);
 
+	/*
+	 * A label is the sharer's own note, so it is shown as it is typed and saved
+	 * once the typing stops. Saves go through the same queue as capability
+	 * updates: each sends only its own field, so neither can undo the other,
+	 * but two saves of the label racing each other could.
+	 */
+	const setLabel = useCallback(
+		( token: string, label: string ) => {
+			if (
+				! requestsRef.current.some( ( item ) => item.token === token )
+			) {
+				return;
+			}
+
+			labels.current.drafts.set( token, label );
+
+			applyRequests(
+				requestsRef.current.map( ( item ) =>
+					item.token === token ? { ...item, label } : item
+				)
+			);
+
+			clearTimeout( labels.current.timers.get( token ) );
+
+			labels.current.timers.set(
+				token,
+				setTimeout( () => {
+					labels.current.timers.delete( token );
+
+					const queue = (
+						updates.current.queues.get( token ) ?? Promise.resolve()
+					)
+						.catch( () => {} )
+						.then( async () => {
+							try {
+								const saved =
+									await apiFetch< CollaborationRequest >( {
+										path: `${ REST_BASE }/${ token }`,
+										method: 'PUT',
+										data: { label },
+									} );
+
+								// Unless they have carried on typing since, in
+								// which case the next save is the one to listen to.
+								if (
+									labels.current.drafts.get( token ) !== label
+								) {
+									return;
+								}
+
+								labels.current.drafts.delete( token );
+
+								applyRequests(
+									requestsRef.current.map( ( item ) =>
+										item.token === token
+											? { ...item, label: saved.label }
+											: item
+									)
+								);
+							} catch ( error ) {
+								if (
+									labels.current.drafts.get( token ) !== label
+								) {
+									return;
+								}
+
+								// Let the next poll put back what the server has.
+								labels.current.drafts.delete( token );
+
+								void createErrorNotice(
+									getErrorMessage(
+										error,
+										__(
+											'The label could not be saved.',
+											'public-collaboration'
+										)
+									),
+									{ type: 'snackbar' }
+								);
+							}
+						} );
+
+					updates.current.queues.set( token, queue );
+				}, LABEL_SAVE_DELAY )
+			);
+		},
+		[ applyRequests, createErrorNotice ]
+	);
+
 	const show = useCallback( ( token: string ) => {
 		setOpen( { token, isNew: false } );
 	}, [] );
@@ -476,5 +592,6 @@ export function useCollaborationRequests() {
 		show,
 		close,
 		setCapability,
+		setLabel,
 	};
 }
