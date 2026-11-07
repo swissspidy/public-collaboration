@@ -107,6 +107,31 @@ Somebody who is in the editor on a collaboration link themselves is refused ever
 
 Changing what a link grants takes effect on the collaborator's very next request — nothing was ever copied onto their account, so there is nothing to revoke separately.
 
+## Abilities
+
+Everything the panel can do is also registered with the [Abilities API](https://developer.wordpress.org/apis/abilities/), under the `public-collaboration` category, so it can be called from code, over `/wp-abilities/v1`, or by AI agents through the MCP Adapter:
+
+| Ability | Does |
+|---|---|
+| `public-collaboration/list-links` | List the live links to a post |
+| `public-collaboration/create-link` | Share a post, optionally with a label and a choice of capabilities |
+| `public-collaboration/update-link` | Change what a link grants, its label, or both |
+| `public-collaboration/extend-link` | Give a link its full idle time back |
+| `public-collaboration/revoke-link` | Revoke a link |
+
+Each one asks the REST controller's own permission check and then makes the matching REST request, so there is one set of rules about who may share what. An agent acting for somebody can do exactly what that person could do from the editor, and no more: a collaborator cannot share the post on, and nobody can lend out uploads they do not have.
+
+```php
+$link = wp_get_ability( 'public-collaboration/create-link' )->execute(
+	[
+		'post'  => 123,
+		'label' => 'Legal review',
+	]
+);
+
+echo $link['url'];
+```
+
 ## Development
 
 ```bash
