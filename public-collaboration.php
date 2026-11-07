@@ -32,6 +32,7 @@ define( 'PUBLIC_COLLABORATION_DIR', __DIR__ );
 require_once __DIR__ . '/inc/class-collaboration-request.php';
 require_once __DIR__ . '/inc/class-rest-collaboration-requests-controller.php';
 require_once __DIR__ . '/inc/functions.php';
+require_once __DIR__ . '/inc/abilities.php';
 require_once __DIR__ . '/inc/default-filters.php';
 
 register_activation_hook( __FILE__, __NAMESPACE__ . '\activate_plugin' );

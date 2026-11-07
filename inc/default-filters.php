@@ -34,3 +34,6 @@ add_filter( 'rest_request_after_callbacks', __NAMESPACE__ . '\filter_touch_on_wr
 
 add_filter( 'cron_schedules', __NAMESPACE__ . '\filter_cron_schedules' ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
 add_action( 'public_collaboration_cleanup', __NAMESPACE__ . '\delete_expired_requests' );
+
+add_action( 'wp_abilities_api_categories_init', __NAMESPACE__ . '\register_ability_category' );
+add_action( 'wp_abilities_api_init', __NAMESPACE__ . '\register_abilities' );
