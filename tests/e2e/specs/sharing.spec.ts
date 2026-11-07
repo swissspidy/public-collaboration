@@ -272,10 +272,27 @@ test.describe( 'Sharing a post', () => {
 				response.ok()
 		);
 
-		await dialog
-			.getByRole( 'textbox', { name: 'Who is this link for?' } )
-			.fill( 'Legal review' );
+		const field = dialog.getByRole( 'textbox', {
+			name: 'Who is this link for?',
+		} );
+
+		// A pause after a space is where a save lands. The server trims what
+		// it stores, and that must not reach back into a field still being
+		// typed into.
+		await field.fill( 'Legal ' );
 		await saved;
+		await field.pressSequentially( 'review' );
+
+		await expect( field ).toHaveValue( 'Legal review' );
+
+		const resaved = page.waitForResponse(
+			( response ) =>
+				response.url().includes( 'collaboration-requests' ) &&
+				'GET' !== response.request().method() &&
+				response.ok()
+		);
+
+		await resaved;
 
 		await dialog.getByRole( 'button', { name: 'Done' } ).click();
 		await expect( dialog ).toBeHidden();

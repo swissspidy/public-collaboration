@@ -166,6 +166,7 @@ export function useCollaborationRequests() {
 	const labels = useRef( {
 		drafts: new Map< string, string >(),
 		timers: new Map< string, ReturnType< typeof setTimeout > >(),
+		saved: new Set< string >(),
 	} );
 
 	/** Puts a list on screen, and where the callbacks can see it. */
@@ -362,6 +363,7 @@ export function useCollaborationRequests() {
 			clearTimeout( labels.current.timers.get( token ) );
 			labels.current.timers.delete( token );
 			labels.current.drafts.delete( token );
+			labels.current.saved.delete( token );
 
 			updates.current.queues.delete( token );
 			updates.current.latest.delete( token );
@@ -490,6 +492,7 @@ export function useCollaborationRequests() {
 			}
 
 			labels.current.drafts.set( token, label );
+			labels.current.saved.delete( token );
 
 			applyRequests(
 				requestsRef.current.map( ( item ) =>
@@ -510,33 +513,44 @@ export function useCollaborationRequests() {
 						.catch( () => {} )
 						.then( async () => {
 							try {
-								const saved =
-									await apiFetch< CollaborationRequest >( {
-										path: `${ REST_BASE }/${ token }`,
-										method: 'PUT',
-										data: { label },
-									} );
+								await apiFetch( {
+									path: `${ REST_BASE }/${ token }`,
+									method: 'PUT',
+									data: { label },
+								} );
 
-								// Unless they have carried on typing since, in
-								// which case the next save is the one to listen to.
+								/*
+								 * What was typed stays on screen even though
+								 * the server may have tidied it — trimming
+								 * "Sam " to "Sam" under somebody who is about
+								 * to type "Smith" would leave them with
+								 * "SamSmith". The draft is kept, so polls
+								 * leave it alone too, until the dialog closes.
+								 */
+								if (
+									labels.current.drafts.get( token ) === label
+								) {
+									labels.current.saved.add( token );
+								}
+							} catch ( error ) {
 								if (
 									labels.current.drafts.get( token ) !== label
 								) {
 									return;
 								}
 
-								labels.current.drafts.delete( token );
-
-								applyRequests(
-									requestsRef.current.map( ( item ) =>
-										item.token === token
-											? { ...item, label: saved.label }
-											: item
-									)
-								);
-							} catch ( error ) {
+								/*
+								 * A link revoked while its label was waiting
+								 * to be saved is gone, which is what was
+								 * asked for: saying its label could not be
+								 * saved would be news about nothing.
+								 */
 								if (
-									labels.current.drafts.get( token ) !== label
+									isNotFound( error ) &&
+									( revokingRef.current.includes( token ) ||
+										! requestsRef.current.some(
+											( item ) => item.token === token
+										) )
 								) {
 									return;
 								}
@@ -568,7 +582,18 @@ export function useCollaborationRequests() {
 		setOpen( { token, isNew: false } );
 	}, [] );
 
+	/*
+	 * Once nobody is typing into it, a label that has been saved can go back
+	 * to being whatever the server says it is. One still waiting to be saved
+	 * is left for its save to settle.
+	 */
 	const close = useCallback( () => {
+		for ( const token of labels.current.saved ) {
+			labels.current.drafts.delete( token );
+		}
+
+		labels.current.saved.clear();
+
 		setOpen( null );
 	}, [] );
 
