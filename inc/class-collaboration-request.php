@@ -599,6 +599,49 @@ final class Collaboration_Request {
 	}
 
 	/**
+	 * Returns the latest this collaboration request could ever expire.
+	 *
+	 * @return int Unix timestamp, or 0 if the creation date could not be read.
+	 */
+	public function get_max_expires_at(): int {
+		$created_at = $this->get_created_at();
+
+		return $created_at > 0 ? $created_at + self::get_max_lifetime() : 0;
+	}
+
+	/**
+	 * Gives the link its full idle time back, for whoever shared it.
+	 *
+	 * The counterpart to {@see touch()} for the other side: a link handed to
+	 * somebody who has not got round to opening it yet runs out on its own
+	 * schedule, and minting a fresh one means sending a fresh link. This resets
+	 * the clock instead — to the same idle time a change would, and never past
+	 * the ceiling on the link's whole life, so it is no way around that either.
+	 *
+	 * Nothing about the collaborator's activity is recorded, since there was
+	 * none: the time left is what changes, not when they last did something.
+	 *
+	 * @return bool Whether the expiry moved.
+	 */
+	public function extend(): bool {
+		$max_expires_at = $this->get_max_expires_at();
+
+		if ( $max_expires_at <= 0 || $this->is_expired() ) {
+			return false;
+		}
+
+		$expires_at = min( time() + self::get_ttl(), $max_expires_at );
+
+		if ( $expires_at <= $this->get_expires_at() ) {
+			return false;
+		}
+
+		update_post_meta( $this->post->ID, self::META_EXPIRES_AT, $expires_at );
+
+		return true;
+	}
+
+	/**
 	 * Returns the capabilities this collaboration request grants.
 	 *
 	 * @return string[] Capability names.

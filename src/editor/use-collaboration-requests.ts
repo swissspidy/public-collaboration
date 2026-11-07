@@ -110,8 +110,10 @@ export function useCollaborationRequests() {
 	const [ open, setOpen ] = useState< OpenLink | null >( null );
 	const [ isCreating, setIsCreating ] = useState( false );
 	const [ revoking, setRevoking ] = useState< string[] >( [] );
+	const [ extending, setExtending ] = useState< string[] >( [] );
 
-	const { createErrorNotice } = useDispatch( noticesStore );
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch( noticesStore );
 
 	const { postId, isNew } = useSelect( ( select ) => {
 		const store = select( editorStore );
@@ -578,6 +580,63 @@ export function useCollaborationRequests() {
 		[ applyRequests, createErrorNotice ]
 	);
 
+	/*
+	 * Only the expiry is taken from the answer. Capabilities and the label may
+	 * have moved on screen while this was in flight, and the server's copy of
+	 * either is not news to anybody.
+	 */
+	const extend = useCallback(
+		async ( token: string ) => {
+			setExtending( ( current ) => [ ...current, token ] );
+
+			try {
+				const extended = await apiFetch< CollaborationRequest >( {
+					path: `${ REST_BASE }/${ token }/extend`,
+					method: 'POST',
+				} );
+
+				applyRequests(
+					requestsRef.current.map( ( item ) =>
+						item.token === token
+							? {
+									...item,
+									expires_at: extended.expires_at,
+									max_expires: extended.max_expires,
+							  }
+							: item
+					)
+				);
+
+				// The button that was clicked goes away with the time it
+				// offered, so the change is announced rather than left for
+				// somebody to notice in a sentence that has been rewritten.
+				void createSuccessNotice(
+					__(
+						'Collaboration link extended.',
+						'public-collaboration'
+					),
+					{ type: 'snackbar' }
+				);
+			} catch ( error ) {
+				void createErrorNotice(
+					getErrorMessage(
+						error,
+						__(
+							'The collaboration link could not be extended.',
+							'public-collaboration'
+						)
+					),
+					{ type: 'snackbar' }
+				);
+			} finally {
+				setExtending( ( current ) =>
+					current.filter( ( item ) => item !== token )
+				);
+			}
+		},
+		[ applyRequests, createErrorNotice, createSuccessNotice ]
+	);
+
 	const show = useCallback( ( token: string ) => {
 		setOpen( { token, isNew: false } );
 	}, [] );
@@ -608,12 +667,15 @@ export function useCollaborationRequests() {
 		isCreating,
 		/** Tokens of the links being revoked right now. */
 		revoking,
+		/** Tokens of the links being extended right now. */
+		extending,
 		/** Whether the post has been saved at least once, so it has something to share. */
 		canShare: null !== sharedPostId,
 		/** What this person may hand out, which is never more than they have. */
 		grantable,
 		create,
 		revoke,
+		extend,
 		show,
 		close,
 		setCapability,

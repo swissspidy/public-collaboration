@@ -139,6 +139,25 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 				'schema' => [ $this, 'get_public_item_schema' ],
 			]
 		);
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/' . self::REST_BASE . '/(?P<token>[a-f0-9]{32})/extend',
+			[
+				'args'   => [
+					'token' => [
+						'description' => __( 'Unique token identifying the collaboration request.', 'public-collaboration' ),
+						'type'        => 'string',
+					],
+				],
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'extend_item' ],
+					'permission_callback' => [ $this, 'extend_item_permissions_check' ],
+				],
+				'schema' => [ $this, 'get_public_item_schema' ],
+			]
+		);
 	}
 
 	/**
@@ -353,6 +372,38 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Checks whether the current user may extend a given collaboration request.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has access, WP_Error object otherwise.
+	 */
+	public function extend_item_permissions_check( $request ) {
+		return $this->check_owner_permission( $this->get_token( $request ) );
+	}
+
+	/**
+	 * Gives a collaboration request its full idle time back.
+	 *
+	 * Answers with the link as it now stands whether or not its expiry moved:
+	 * one already as far out as it can go is not an error, it is a link that
+	 * has all the time it is going to get.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, error object on failure.
+	 */
+	public function extend_item( $request ) {
+		$collaboration_request = Collaboration_Request::get_by_token( $this->get_token( $request ) );
+
+		if ( ! $collaboration_request instanceof Collaboration_Request ) {
+			return $this->not_found_error();
+		}
+
+		$collaboration_request->extend();
+
+		return $this->prepare_item_for_response( $collaboration_request, $request );
+	}
+
+	/**
 	 * Checks whether the current user may revoke a given collaboration request.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -559,6 +610,7 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 			'label'        => $item->get_label(),
 			'post'         => $item->get_parent_id(),
 			'expires_at'   => $item->get_expires_at(),
+			'max_expires'  => $item->get_max_expires_at(),
 			'last_active'  => $item->get_last_active_at(),
 			'capabilities' => $item->get_capabilities(),
 			'joined'       => $user instanceof WP_User,
@@ -637,6 +689,12 @@ class REST_Collaboration_Requests_Controller extends WP_REST_Controller {
 				],
 				'expires_at'   => [
 					'description' => __( 'Unix timestamp at which the collaboration request expires.', 'public-collaboration' ),
+					'type'        => 'integer',
+					'context'     => [ 'view', 'edit' ],
+					'readonly'    => true,
+				],
+				'max_expires'  => [
+					'description' => __( 'Unix timestamp past which the collaboration request can never be extended.', 'public-collaboration' ),
 					'type'        => 'integer',
 					'context'     => [ 'view', 'edit' ],
 					'readonly'    => true,

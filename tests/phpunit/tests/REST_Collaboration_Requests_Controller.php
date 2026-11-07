@@ -135,6 +135,7 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 
 		$this->assertArrayHasKey( self::ROUTE, $routes );
 		$this->assertArrayHasKey( self::ROUTE . '/(?P<token>[a-f0-9]{32})', $routes );
+		$this->assertArrayHasKey( self::ROUTE . '/(?P<token>[a-f0-9]{32})/extend', $routes );
 	}
 
 	/**
@@ -734,7 +735,7 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 
 		$this->assertSame( 'collaboration-request', $schema['title'] );
 		$this->assertSame(
-			[ 'token', 'url', 'label', 'post', 'expires_at', 'last_active', 'capabilities', 'joined', 'collaborator' ],
+			[ 'token', 'url', 'label', 'post', 'expires_at', 'max_expires', 'last_active', 'capabilities', 'joined', 'collaborator' ],
 			array_keys( $schema['properties'] )
 		);
 	}
@@ -951,6 +952,89 @@ class Test_REST_Collaboration_Requests_Controller extends WP_Test_REST_TestCase 
 		$this->assertInstanceOf(
 			Collaboration_Request::class,
 			Collaboration_Request::get_by_token( $token )
+		);
+	}
+
+	/**
+	 * @covers ::extend_item
+	 * @covers ::extend_item_permissions_check
+	 */
+	public function test_extend_item(): void {
+		$data    = $this->create_request();
+		$request = Collaboration_Request::get_by_token( (string) $data['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() + MINUTE_IN_SECONDS );
+
+		$response = rest_get_server()->dispatch( new WP_REST_Request( 'POST', self::ROUTE . '/' . $data['token'] . '/extend' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertEqualsWithDelta( time() + Collaboration_Request::get_ttl(), $response->get_data()['expires_at'], 2 );
+		$this->assertSame( $request->get_max_expires_at(), $response->get_data()['max_expires'] );
+	}
+
+	/**
+	 * @covers ::extend_item
+	 */
+	public function test_extend_item_is_not_an_error_when_there_is_nothing_to_add(): void {
+		$data = $this->create_request();
+
+		$response = rest_get_server()->dispatch( new WP_REST_Request( 'POST', self::ROUTE . '/' . $data['token'] . '/extend' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * @covers ::extend_item_permissions_check
+	 */
+	public function test_extend_item_is_not_available_to_anybody_else(): void {
+		$data = $this->create_request();
+
+		wp_set_current_user( self::$author_id );
+
+		$this->assertErrorResponse(
+			'public_collaboration_invalid_token',
+			rest_get_server()->dispatch( new WP_REST_Request( 'POST', self::ROUTE . '/' . $data['token'] . '/extend' ) ),
+			404
+		);
+	}
+
+	/**
+	 * A collaborator's time is the sharer's to give, not theirs to take.
+	 *
+	 * @covers ::extend_item_permissions_check
+	 */
+	public function test_a_collaborator_cannot_extend_their_own_link(): void {
+		$created = $this->create_request();
+		$request = Collaboration_Request::get_by_token( (string) $created['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		wp_set_current_user( $request->get_or_create_user() );
+
+		$this->assertErrorResponse(
+			'public_collaboration_invalid_token',
+			rest_get_server()->dispatch( new WP_REST_Request( 'POST', self::ROUTE . '/' . $created['token'] . '/extend' ) ),
+			404
+		);
+	}
+
+	/**
+	 * @covers ::extend_item_permissions_check
+	 */
+	public function test_an_expired_link_cannot_be_extended(): void {
+		$data    = $this->create_request();
+		$request = Collaboration_Request::get_by_token( (string) $data['token'] );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $request );
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+
+		$this->assertErrorResponse(
+			'public_collaboration_invalid_token',
+			rest_get_server()->dispatch( new WP_REST_Request( 'POST', self::ROUTE . '/' . $data['token'] . '/extend' ) ),
+			404
 		);
 	}
 }

@@ -596,4 +596,73 @@ class Test_Collaboration_Request extends WP_UnitTestCase {
 		$this->assertInstanceOf( Collaboration_Request::class, $request );
 		$this->assertSame( 'Sam', $request->get_label() );
 	}
+
+	/**
+	 * @covers ::extend
+	 */
+	public function test_extend_gives_the_full_idle_time_back(): void {
+		$request = $this->create_request();
+		$post_id = $request->get_post()->ID;
+
+		update_post_meta( $post_id, Collaboration_Request::META_EXPIRES_AT, time() + 2 * MINUTE_IN_SECONDS );
+		$last_active = $request->get_last_active_at();
+
+		$this->assertTrue( $request->extend() );
+		$this->assertEqualsWithDelta( time() + Collaboration_Request::get_ttl(), $request->get_expires_at(), 2 );
+		$this->assertSame( $last_active, $request->get_last_active_at(), 'Nobody did anything through the link.' );
+	}
+
+	/**
+	 * @covers ::extend
+	 * @covers ::get_max_expires_at
+	 */
+	public function test_extend_stops_at_the_ceiling(): void {
+		$request = $this->create_request();
+		$post_id = $request->get_post()->ID;
+
+		add_filter( 'public_collaboration_request_max_lifetime', static fn (): int => 20 * MINUTE_IN_SECONDS );
+
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_date'     => gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS ),
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS ),
+			]
+		);
+
+		update_post_meta( $post_id, Collaboration_Request::META_EXPIRES_AT, time() + MINUTE_IN_SECONDS );
+
+		$found = Collaboration_Request::get_by_token( $request->get_token() );
+
+		$this->assertInstanceOf( Collaboration_Request::class, $found );
+		$this->assertTrue( $found->extend() );
+		$this->assertSame( $found->get_max_expires_at(), $found->get_expires_at() );
+		$this->assertFalse( $found->extend(), 'There is no further to go.' );
+	}
+
+	/**
+	 * @covers ::extend
+	 */
+	public function test_extend_does_not_shorten_a_link(): void {
+		add_filter( 'public_collaboration_request_ttl', static fn (): int => 5 * MINUTE_IN_SECONDS );
+
+		$request = $this->create_request();
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() + 10 * MINUTE_IN_SECONDS );
+
+		$this->assertFalse( $request->extend() );
+		$this->assertEqualsWithDelta( time() + 10 * MINUTE_IN_SECONDS, $request->get_expires_at(), 2 );
+	}
+
+	/**
+	 * @covers ::extend
+	 */
+	public function test_extend_does_not_bring_an_expired_request_back(): void {
+		$request = $this->create_request();
+
+		update_post_meta( $request->get_post()->ID, Collaboration_Request::META_EXPIRES_AT, time() - 1 );
+
+		$this->assertFalse( $request->extend() );
+		$this->assertTrue( $request->is_expired() );
+	}
 }

@@ -24,7 +24,13 @@ import { copy } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getDuration, getTimeLeft, isActive, isEnding } from '../expiry';
+import {
+	getDuration,
+	getExtension,
+	getTimeLeft,
+	isActive,
+	isEnding,
+} from '../expiry';
 import { getSettings } from './settings';
 import type { CollaborationCapability, CollaborationRequest } from './types';
 import './editor.css';
@@ -123,6 +129,10 @@ interface CollaborationModalProps {
 	isNew: boolean;
 	/** Whether the link is being revoked right now. */
 	isRevoking: boolean;
+	/** Whether the link is being extended right now. */
+	isExtending: boolean;
+	/** Called when the person gives the link its time back. */
+	onExtend: () => void;
 	/** Called as the label is typed into. */
 	onChangeLabel: ( label: string ) => void;
 	/** Called when a capability is switched on or off. */
@@ -147,6 +157,8 @@ interface CollaborationModalProps {
  * @param props.grantable          What the person sharing may hand out, which is never more than they have.
  * @param props.isNew              Whether the link was just minted, and so can still be called off.
  * @param props.isRevoking         Whether the link is being revoked right now.
+ * @param props.isExtending        Whether the link is being extended right now.
+ * @param props.onExtend           Called when the person gives the link its time back.
  * @param props.onChangeLabel      Called as the label is typed into.
  * @param props.onToggleCapability Called when a capability is switched on or off.
  * @param props.onRevoke           Called when the person takes the link back.
@@ -157,6 +169,8 @@ export function CollaborationModal( {
 	grantable,
 	isNew,
 	isRevoking,
+	isExtending,
+	onExtend,
 	onChangeLabel,
 	onToggleCapability,
 	onRevoke,
@@ -173,6 +187,12 @@ export function CollaborationModal( {
 		( option ) =>
 			grantable.includes( option.value ) ||
 			request.capabilities.includes( option.value )
+	);
+
+	const extension = getExtension(
+		request.expires_at,
+		request.max_expires,
+		getSettings().ttl
 	);
 
 	const copyRef = useCopyToClipboard( request.url, () => {
@@ -281,9 +301,35 @@ export function CollaborationModal( {
 				</VStack>
 			</fieldset>
 
-			<p className="public-collaboration-modal__status">
+			<HStack
+				className="public-collaboration-modal__status"
+				alignment="flex-start"
+				spacing={ 2 }
+			>
 				<Text variant="muted">{ describeStatus( request ) }</Text>
-			</p>
+
+				{ /*
+				 * Only while it would make a difference: somebody working keeps
+				 * the clock going by themselves, and a link at its ceiling has
+				 * nowhere further to go.
+				 */ }
+				{ null !== extension && (
+					<Button
+						className="public-collaboration-modal__extend"
+						variant="link"
+						onClick={ onExtend }
+						isBusy={ isExtending }
+						disabled={ isExtending || isRevoking }
+						accessibleWhenDisabled
+					>
+						{ sprintf(
+							/* translators: %s: How long the link would last, e.g. "15 minutes". */
+							__( 'Extend to %s', 'public-collaboration' ),
+							getDuration( extension )
+						) }
+					</Button>
+				) }
+			</HStack>
 
 			<HStack justify="flex-end">
 				{ /*

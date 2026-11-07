@@ -46,6 +46,8 @@ Following a working link signs the visitor in as a temporary account and drops t
 
 **Expiry slides forward as somebody works.** A quarter of an hour flat would take the link away mid-paragraph from the one person it was meant for, so the clock is counted from the last change rather than from the moment the link was minted — and reads do not count, since an editor left open talks to the server whether anybody is at the keyboard or not. Activity is recorded at most once a minute, and the whole thing stops at a ceiling of twelve hours, so a browser left open on a desk cannot hold a door open all week.
 
+**A link can be given its time back.** A link sent to somebody who has not opened it yet would otherwise run out on its own schedule, and the only fix would be to send a new one. The dialog offers to extend it instead: back to the full quarter of an hour, never past the twelve-hour ceiling, and only from whoever may manage the post's links — a collaborator cannot extend their own.
+
 ## Architecture notes
 
 **WordPress needs an account to hang permissions off, so it gets one.** A collaborator is a real WordPress user, created the first time somebody actually follows the link and deleted along with the request. It carries no role, and nothing is ever written to its capabilities: every capability it ends up with is worked out from the request at the moment the check is made, by a `user_has_cap` filter, and only for the one post. Let the link expire and the account can do nothing at all — which is what makes revoking it a single `wp_delete_post()` rather than an audit.
@@ -98,6 +100,7 @@ add_action(
 | `POST /public-collaboration/v1/collaboration-requests` | `edit_post` on the post, plus `upload_files` to grant uploads | Share a post |
 | `GET /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | See whether anybody has joined |
 | `PUT /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Change what the link grants, its label, or both |
+| `POST /public-collaboration/v1/collaboration-requests/<token>/extend` | Owner, or `edit_others_posts` | Give the link its full idle time back, up to its ceiling |
 | `DELETE /public-collaboration/v1/collaboration-requests/<token>` | Owner, or `edit_others_posts` | Revoke a link |
 
 Somebody who is in the editor on a collaboration link themselves is refused every one of these, listing included. Being able to edit the post is what qualifies anybody else to manage its links, and a collaborator can edit the post — so that one exception is spelled out rather than left to follow from the rule.
