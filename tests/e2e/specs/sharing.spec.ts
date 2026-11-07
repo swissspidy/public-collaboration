@@ -24,6 +24,12 @@ test.describe( 'Sharing a post', () => {
 		await expect( dialog ).toContainText(
 			'Nobody has opened the link yet'
 		);
+
+		// A link that has only just been minted has all the time it can get,
+		// so there is nothing to extend it by.
+		await expect(
+			dialog.getByRole( 'button', { name: /^Extend to / } )
+		).toHaveCount( 0 );
 	} );
 
 	test( 'offers both capabilities, granted by default', async ( {

@@ -78,3 +78,27 @@ export function isEnding(
 ): boolean {
 	return expiresAt < lastActive + ttl;
 }
+
+/**
+ * Says how long a link would last if its clock were reset now, if that is
+ * worth offering.
+ *
+ * Resetting gives the link its full idle time back, but never past the ceiling
+ * on its whole life. Anything less than a minute more than it already has is
+ * not worth a button: it would read as "extend" and do next to nothing.
+ *
+ * @param expiresAt  Unix timestamp at which the link expires.
+ * @param maxExpires Unix timestamp past which it can never be extended.
+ * @param ttl        How long a link outlives a change, in seconds.
+ * @return Seconds the link would have left after extending, or null if extending is not worth offering.
+ */
+export function getExtension(
+	expiresAt: number,
+	maxExpires: number,
+	ttl: number
+): number | null {
+	const now = Date.now() / 1000;
+	const extended = Math.min( now + ttl, maxExpires );
+
+	return extended - expiresAt >= 60 ? extended - now : null;
+}

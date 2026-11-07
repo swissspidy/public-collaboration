@@ -12,6 +12,8 @@ export interface CollaborationRequest {
 	post: number;
 	/** Unix timestamp at which the collaboration request expires. */
 	expires_at: number;
+	/** Unix timestamp past which the collaboration request can never be extended. */
+	max_expires: number;
 	/** Unix timestamp of the collaborator's last change. */
 	last_active: number;
 	/** What the collaborator is allowed to do. */

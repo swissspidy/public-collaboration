@@ -54,6 +54,11 @@
 	margin: 0 0 1.5em;
 }
 
+.public-collaboration-modal__extend.components-button {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
 .public-collaboration-links__title {
 	margin: 0;
 }

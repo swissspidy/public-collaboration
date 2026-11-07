@@ -45,10 +45,12 @@ export function SharePanel() {
 		isNewLink,
 		isCreating,
 		revoking,
+		extending,
 		canShare,
 		grantable,
 		create,
 		revoke,
+		extend,
 		show,
 		close,
 		setCapability,
@@ -118,6 +120,8 @@ export function SharePanel() {
 					grantable={ grantable }
 					isNew={ isNewLink }
 					isRevoking={ revoking.includes( openRequest.token ) }
+					isExtending={ extending.includes( openRequest.token ) }
+					onExtend={ () => void extend( openRequest.token ) }
 					onChangeLabel={ ( value ) =>
 						setLabel( openRequest.token, value )
 					}
